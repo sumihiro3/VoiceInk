@@ -3,7 +3,7 @@
   "language": "ja",
   "baseBranch": "feature/whisper-streaming",
   "requirementsPath": "docs/releases/{release}/requirements.md",
-  "conventionsDoc": "CLAUDE.md",
+  "conventionsDoc": "docs/ARCHITECTURE.md",
   "checks": [
     {
       "key": "check",
