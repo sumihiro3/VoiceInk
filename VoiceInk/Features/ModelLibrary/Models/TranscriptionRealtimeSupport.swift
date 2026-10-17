@@ -2,7 +2,8 @@ import Foundation
 
 enum TranscriptionRealtimeSupport {
     static func isAvailable(for model: any TranscriptionModel) -> Bool {
-        model.supportsStreaming
+        if model.provider == .whisper && WhisperStreamingSettings.isEnabled { return true }
+        return model.supportsStreaming
     }
 
     static func isRequired(for model: any TranscriptionModel) -> Bool {

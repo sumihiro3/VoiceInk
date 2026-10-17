@@ -125,6 +125,7 @@ class StreamingTranscriptionService {
     private var committedSegments: [String] = []
     private let modelContext: ModelContext
     private let fluidAudioService: FluidAudioTranscriptionService?
+    private let whisperModelsDirectory: URL?
     private var onPartialTranscript: ((String) -> Void)?
     private let metrics = StreamingMetrics()
     private var stopStartedAt: Date?
@@ -133,10 +134,12 @@ class StreamingTranscriptionService {
 
     init(
         modelContext: ModelContext, fluidAudioService: FluidAudioTranscriptionService? = nil,
+        whisperModelsDirectory: URL? = nil,
         onPartialTranscript: ((String) -> Void)? = nil
     ) {
         self.modelContext = modelContext
         self.fluidAudioService = fluidAudioService
+        self.whisperModelsDirectory = whisperModelsDirectory
         self.onPartialTranscript = onPartialTranscript
     }
 
@@ -323,6 +326,9 @@ class StreamingTranscriptionService {
                 )
             }
             return FluidAudioStreamingProvider(fluidAudioService: fluidAudioService)
+        }
+        if model.provider == .whisper {
+            return WhisperStreamingProvider(modelsDirectory: whisperModelsDirectory)
         }
         guard let cloudProvider = CloudProviderRegistry.provider(for: model.provider),
             let streamingProvider = cloudProvider.makeStreamingProvider(modelContext: modelContext)
