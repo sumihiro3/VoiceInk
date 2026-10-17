@@ -18,9 +18,14 @@
 | `docs/development-workflow.md` | リリースサイクルとブランチ運用の説明 | release-workflow の運用ガイド |
 | `docs/known-issues.md` | レビュー由来の既知の課題 | release-workflow が未対応の指摘を起票する先 |
 | `docs/e2e-verification.md` | MacBook Pro での口述テストのケースと計測項目 | 実機でしか確かめられない受け入れ基準の手順 |
+| `docs/whisper-streaming-investigation.md` | M0 の調査メモ。既存のリアルタイム処理・途中経過・最終処理・Whisper・音声バッファの調査と、差し込み案・食い違い・未決事項への提案 | M1 以降の実装の前提をそろえるため |
+| `docs/ARCHITECTURE.md` | フォークの規約と、その根拠になる既存コードの場所 | M1 以降の実装とレビューが従う規約の正本にするため |
+| `docs/releases/release-0-whisper-investigation/requirements.md` | release-0 の確定要件 | release-workflow の入力 |
 
 ## 変更した既存ファイル
 
 | ファイル | 変更内容 | 理由 |
 | --- | --- | --- |
 | `.gitignore` | `logs/` を追加 | MacBook Pro から回収するログに口述内容が含まれるため、誤ってコミットしない |
+| `.claude/workflow.config.json` | `conventionsDoc` を `CLAUDE.md` から `docs/ARCHITECTURE.md` に切り替え | 実装とレビューが規約文書を参照するように |
+| `CLAUDE.md` | M0 を完了にし、調査メモへのリンクを追加 | M0 の完了を記録するため |
