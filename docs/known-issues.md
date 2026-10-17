@@ -30,16 +30,17 @@ VoiceInk フォーク(Whisper 途中経過表示) の差分レビュー（敵対
   - 対応方針: <どう直すか。未定なら「要壁打ち」>
 -->
 
-### F1. 停止時に途中認識を待つ案が最終処理をブロックする
+### P1. 録音ごとにモデルを同期的に読み込み、初回表示の2秒基準も計測から隠している
 
-- severity: low（review:final-output 由来、起票日: 2026-10-17）
-- 場所: `docs/whisper-streaming-investigation.md:391`
-- 現象: `stopAndFinalize` が返ってから batch fallback(録音停止後に全音声を処理し直す経路)が始まる構造なのに、進行中の途中認識への対処として「取り消す、または待つ」を許容している。25秒近い音声の Whisper 処理が走っている瞬間に録音を停止すると、その完了待ちが録音停止から貼り付けまでの遅延へそのまま加算される。待機中は最終処理も開始できないため、「途中経過の失敗・中止が最終処理の遅延につながらない」という一線を守れない。推測を含むが、文書自身が `stopDisposition` の判定前に対処が必要と説明しており、実際の制御順に基づくリスクである。
-- 対応方針: 「待つ」を選択肢から外し、whisper.cpp の abort callback 等で進行中の途中認識を中断して、短い上限時間内に専用 context を切り離し、batch fallback を直ちに開始する設計を規約化する。中断不能な場合も完了待ちせず、専用 context 上の処理を古いセッションとして無効化したうえで最終処理を開始する。
+- severity: low（review:perf 由来、起票日: 2026-10-17）
+- 場所: `VoiceInk/Infrastructure/Providers/Transcription/Whisper/Streaming/WhisperStreamingProvider.swift:67-87`
+- 現象: `connect` はセッションごとに `WhisperContext.createContext` でモデルを新規ロードし、その完了後に初めて周期 Task を開始する。そのため初回 partial(途中経過の最初の表示)は「モデルロード時間 + 1秒の待機 + 推論時間」後となり、「話し始めて2秒以内」という合格基準を破りやすい。さらに `connectedAt` はロード完了後に設定されるため、`firstPartialAfterConnect` はユーザーが実際に待ったモデルロード時間を除外し、E2E 計測でも退行を見逃す。短時間で停止した場合も、キャンセルできないロードが最終 batch(録音停止後の全音声処理)と資源を競合し得る。
+- 対応方針: 途中経過用 context を録音開始前にプリロードして安全に再利用するライフサイクルを設ける。少なくとも初回遅延は録音・発話開始を基準に計測し、ロード中の停止ではロード完了を待たず最終処理と競合しない設計にする。
 
 ## 解決済みログ
 
 | ID | 内容 | 解決リリース |
 | --- | --- | --- |
+| F1 | 停止時に途中認識を待つ案が最終処理をブロックする。abort callback で中断し、disconnect / commit は認識の完了を待たない規約(ARCHITECTURE.md 3-4)にした | release-1-whisper-partial-prototype(FR-04 AC-6、FR-06 AC-1) |
 
 <!-- 解決した項目はバックログから削除せずこの表へ移動し、解決リリース(対応 FR 番号つき)を記録する -->

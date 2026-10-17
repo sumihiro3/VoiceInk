@@ -62,10 +62,10 @@ ssh mbp "log show --last 5m --info --predicate 'subsystem == \"com.prakashjoship
 
 - フォークは公開、個人の GitHub アカウント
 - MacBook Pro の普段使いの VoiceInk は、当面フォーク版で置き換える。複雑な開発が出てきたら別アプリに分ける
+- 録音停止後は Mode で選んだ Whisper モデル(large-v3-turbo)で全音声を処理し直す(provider の `stopDisposition = .useBatchFallback`。release-1 で決定)
 
 ## 未決事項(M0 の調査結果を見て決める)
 
 - 途中経過用モデル(base / small / large-v3-turbo の量子化版)
 - 処理間隔と認識対象の上限の初期値
-- 録音停止後に large-v3-turbo でやり直すか、確定済みの途中経過を使うか
 - VAD を whisper.cpp 内蔵のものにするか、音量のしきい値で済ませるか
