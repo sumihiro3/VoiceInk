@@ -1,7 +1,8 @@
 # Define a directory for dependencies in the user's home folder
 DEPS_DIR := $(HOME)/VoiceInk-Dependencies
 WHISPER_CPP_DIR := $(DEPS_DIR)/whisper.cpp
-FRAMEWORK_PATH := $(WHISPER_CPP_DIR)/build-apple/whisper.xcframework
+WHISPER_CPP_COMMIT := 0c7be696371069e0baa2515ed7aa08d5a5473aa6
+FRAMEWORK_PATH :=$(WHISPER_CPP_DIR)/build-apple/whisper.xcframework
 LOCAL_DERIVED_DATA := $(CURDIR)/.local-build
 LOCAL_CODESIGN_IDENTITY ?=
 RUN_APP_NAME ?= VoiceInk
@@ -28,14 +29,23 @@ healthcheck: check
 # Build process
 whisper:
 	@mkdir -p $(DEPS_DIR)
-	@if [ ! -d "$(FRAMEWORK_PATH)" ]; then \
-		echo "Building whisper.xcframework in $(DEPS_DIR)..."; \
-		if [ ! -d "$(WHISPER_CPP_DIR)" ]; then \
-			git clone https://github.com/ggerganov/whisper.cpp.git $(WHISPER_CPP_DIR); \
-		else \
-			(cd $(WHISPER_CPP_DIR) && git pull); \
+	@REBUILD=0; \
+	if [ ! -d "$(WHISPER_CPP_DIR)" ]; then \
+		git clone https://github.com/ggerganov/whisper.cpp.git $(WHISPER_CPP_DIR) || exit 1; \
+		git -C $(WHISPER_CPP_DIR) checkout $(WHISPER_CPP_COMMIT) || exit 1; \
+		REBUILD=1; \
+	else \
+		HEAD=$$(git -C $(WHISPER_CPP_DIR) rev-parse HEAD) || exit 1; \
+		if [ "$$HEAD" != "$(WHISPER_CPP_COMMIT)" ]; then \
+			git -C $(WHISPER_CPP_DIR) fetch || exit 1; \
+			git -C $(WHISPER_CPP_DIR) checkout $(WHISPER_CPP_COMMIT) || exit 1; \
+			echo "whisper.cpp HEAD を固定コミット $(WHISPER_CPP_COMMIT) へ切り替えた"; \
+			REBUILD=1; \
 		fi; \
-		cd $(WHISPER_CPP_DIR) && ./build-xcframework.sh; \
+	fi; \
+	if [ "$$REBUILD" = "1" ] || [ ! -d "$(FRAMEWORK_PATH)" ]; then \
+		echo "Building whisper.xcframework in $(DEPS_DIR)..."; \
+		cd $(WHISPER_CPP_DIR) && ./build-xcframework.sh || exit 1; \
 	else \
 		echo "whisper.xcframework already built in $(DEPS_DIR), skipping build"; \
 	fi
