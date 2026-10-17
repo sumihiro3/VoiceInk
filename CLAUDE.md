@@ -43,7 +43,7 @@ ssh mbp "log show --last 5m --info --predicate 'subsystem == \"com.prakashjoship
 
 ## マイルストーン
 
-- [ ] M0 調査:既存のリアルタイム処理を読み、`docs/whisper-streaming-investigation.md` にまとめる(コードは変更しない)
+- [x] M0 調査:既存のリアルタイム処理を読み、[`docs/whisper-streaming-investigation.md`](docs/whisper-streaming-investigation.md) にまとめる(コードは変更しない)
 - [ ] M1 表示だけの試作:1秒ごとに録音開始からの全音声を認識し、そのまま表示する
 - [ ] M2 確定処理:LocalAgreement で確定・未確定を分けて表示する
 - [ ] M3 窓の切り詰め:25秒超で確定済み区間をバッファから外す
