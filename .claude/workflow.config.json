@@ -1,0 +1,158 @@
+{
+  "configVersion": 1,
+  "language": "ja",
+  "baseBranch": "feature/whisper-streaming",
+  "requirementsPath": "docs/releases/{release}/requirements.md",
+  "conventionsDoc": "CLAUDE.md",
+  "checks": [
+    {
+      "key": "check",
+      "cmd": "make check",
+      "cwd": "."
+    },
+    {
+      "key": "build",
+      "cmd": "make build",
+      "cwd": "."
+    }
+  ],
+  "reviewDimensions": [
+    {
+      "key": "bugs",
+      "prompt": "正確性のレビュー: ロジックバグ、エラーハンドリング漏れ、境界条件を探してください。macOS の Swift アプリ(VoiceInk のフォーク)であることを踏まえ、特に次を見ること — 録音の開始・停止・Esc による中止の各経路で状態(recordingState、partialTranscript、セッション)が正しく片付くか、音声サンプルの変換(PCM16 → Float32、16kHz mono)とバッファの切り出し・切り詰めの添字や時刻の計算、whisper.cpp の C API 呼び出し(ポインタの寿命、戻り値の確認、解放漏れ)、1秒未満の音声や空の認識結果の扱い。確信度の高いものだけ報告すること。"
+    },
+    {
+      "key": "perf",
+      "prompt": "性能のレビュー: このフォークは録音中に一定間隔(初期値1秒)で Whisper を回して途中経過を出す。合格基準は CLAUDE.md の「合格基準(暫定)」が正本(話し始めて2秒以内に文字が出る、60秒以上話し続けても1回の認識時間が処理間隔を超え続けない)。これを脅かす実装を探すこと — 前の回が終わっていないのに次の回を始める(処理を重ねる)、認識対象の音声が上限(25秒)を超えて伸び続ける、録音中に毎回モデルを読み込み直す、メインスレッドでの重い処理、音声バッファの不要なコピー、1秒ごとの大量ログや stderr 出力。あわせて録音停止から貼り付けまでの時間が従来より伸びる変更(途中経過の処理が最終処理と CPU・GPU を取り合う等)を探すこと。実害のあるものだけ報告すること。"
+    },
+    {
+      "key": "arch",
+      "prompt": "アーキテクチャ規約のレビュー: CLAUDE.md(と、存在すれば docs/ARCHITECTURE.md、docs/whisper-streaming-investigation.md)を読み、規約違反を探してください。特に次を見ること — 新しい処理が新しいファイルにまとまっているか、既存のプロバイダ契約(StreamingTranscriptionProvider)やセッション(TranscriptionSession)の流儀に沿っているか、責務の分離と命名、当該リリースの requirements.md「スコープ外」に挙げた項目が混入していないか。"
+    },
+    {
+      "key": "security",
+      "prompt": "セキュリティとプライバシーのレビュー: 口述内容は機微情報として扱う。認識結果・途中経過のテキストや音声が、Logger の privacy: .public で出力されていないか(文字数・秒数などの数値だけを public にしてよい)、ファイルやリポジトリ内(logs/ 以外)に書き出されていないか、外部へ送信されていないかを確認すること。あわせて entitlements・権限(マイク、アクセシビリティ)の不要な追加、C API への不正な長さ・ポインタの受け渡しを探すこと。"
+    },
+    {
+      "key": "concurrency",
+      "prompt": "並行処理のレビュー: actor / @MainActor / nonisolated / Task / Task.detached / NSLock / OSAllocatedUnfairLock / DispatchQueue の使い方を見ること。特に次を探すこと — WhisperContext(actor)への呼び出しが分割されていて間に別の呼び出しが割り込める(setLanguage / setPrompt / fullTranscribe / 結果の読み出しの間)、録音中の途中経過の処理と録音停止後の最終処理が同じ context やバッファを同時に使う、音声の chunk を受けるスレッド(audioProcessingQueue)からの共有状態の更新でロックが抜けている、MainActor の外から @Published を更新している、cancel / disconnect の後に処理中の Task が残って古い結果を流す、Sendable でない型を境界越しに渡している。"
+    },
+    {
+      "key": "final-output",
+      "prompt": "最終処理の保護のレビュー: このフォークの一線は「途中経過は表示専用で、貼り付けるのは録音停止後の最終処理の結果だけ」「途中経過の処理でエラーが出ても、録音後の最終処理は従来どおり動く」こと。これを壊す変更を探すこと — 途中経過のテキストが最終テキスト(TranscriptionPipeline に入る文字列)に混ざる、途中経過の失敗・タイムアウト・中止が最終処理の失敗や遅延につながる、録音停止後の最終処理が Mode で選んだ Whisper モデル以外で行われる、整形・置換・AI 整形・貼り付けの経路が変わる、Whisper 以外のモデル(Parakeet / Nemotron / クラウド)の既存の動作が変わる。"
+    },
+    {
+      "key": "fork-diff",
+      "prompt": "本家との差分のレビュー: このリポジトリは Beingpax/VoiceInk のフォークで、本家の更新を定期的に取り込む(rebase)。既存ファイルへの変更が差し込みに必要な最小限か(整形し直し・並べ替え・無関係なリネームなど、衝突を増やすだけの変更が混ざっていないか)、既存ファイルの変更と追加ファイルが FORK-CHANGES.md に「ファイル・変更内容・理由」で記録されているか、本家の文書(README.md / BUILDING.md / CONTRIBUTING.md)を書き換えていないかを確認すること。"
+    }
+  ],
+  "diffPathScope": null,
+  "syncDocs": {
+    "targets": [
+      {
+        "path": "FORK-CHANGES.md",
+        "instruction": "FORK-CHANGES.md を差分に同期してください。このリリースで追加したファイルは「追加したファイル」表に、変更した既存ファイルは「変更した既存ファイル」表に、ファイル・変更内容・理由の3列で追記する。既に記録がある行は内容が変わったときだけ更新し、行を消さないこと。"
+      },
+      {
+        "path": "CLAUDE.md",
+        "instruction": "CLAUDE.md は方針の正本なので、変える箇所を限る。完了したマイルストーンのチェック([ ] → [x])、決定事項・未決事項の更新(このリリースで決まったものを未決事項から決定事項へ移す)、ビルドと動作確認の手順が実際に変わった場合の更新だけを行う。作業の進め方・設計の要点・合格基準の文言は、requirements.md で変更が決まった場合を除き変えないこと。乖離がなければ変更しないこと。"
+      },
+      {
+        "path": "docs/whisper-streaming-investigation.md",
+        "instruction": "調査メモ(M0 の成果物)を実装に同期してください。ファイルが存在しない場合は何もしない。実装で前提が変わった箇所(差し込み方の案、食い違い、未決事項への提案)だけを更新し、変わった理由と日付を添える。既存コードの事実(path:line など)は、そのコードが変わった場合だけ直すこと。乖離がなければ変更しないこと。"
+      },
+      {
+        "path": "docs/ARCHITECTURE.md",
+        "instruction": "フォークの規約文書を実装に同期してください。ファイルが存在しない場合は何もしない。守るべき制約(途中経過は表示専用、最終処理を壊さない、処理を重ねない)は実装が変わっても弱めないこと。乖離がなければ変更しないこと。"
+      }
+    ],
+    "frozen": [
+      "docs/fork-plan.md"
+    ],
+    "excluded": [
+      "README.md",
+      "BUILDING.md",
+      "CONTRIBUTING.md",
+      "CODE_OF_CONDUCT.md",
+      "docs/development-workflow.md",
+      "docs/known-issues.md",
+      "docs/e2e-verification.md"
+    ]
+  },
+  "knownIssues": {
+    "path": "docs/known-issues.md",
+    "categoryMap": {
+      "bugs": "B",
+      "perf": "P",
+      "arch": "A",
+      "security": "S",
+      "concurrency": "C",
+      "final-output": "F",
+      "fork-diff": "D",
+      "check:check": "N",
+      "check:build": "B"
+    },
+    "defaultCategory": "N"
+  },
+  "models": {
+    "review": "opus",
+    "verify": "opus",
+    "explore": "sonnet",
+    "design": "opus",
+    "implementLow": "sonnet",
+    "implementMid": "sonnet",
+    "implementHigh": "opus",
+    "check": "haiku",
+    "fix": "opus",
+    "docSync": "sonnet",
+    "codex": "sonnet",
+    "bootstrap": "haiku"
+  },
+  "efforts": {
+    "review": "high",
+    "verify": "high",
+    "explore": "medium",
+    "design": "high",
+    "implementLow": "low",
+    "implementMid": "medium",
+    "implementHigh": "high",
+    "fix": "high",
+    "docSync": "medium",
+    "codex": "low"
+  },
+  "complexityRubricExamples": {
+    "low": "設定値の変更、定型パターンをそのまま適用する追加、機械的な置換",
+    "mid": "既存パターンに沿って新規モジュールを1つ追加する、中程度の分岐を伴う既存機能の拡張",
+    "high": "新しい抽象の導入、複数モジュールにまたがる契約変更、複雑な状態管理の設計"
+  },
+  "automation": {
+    "pipeline": "ask",
+    "autoApprove": true,
+    "createPr": true,
+    "maxFixIterationsCheck": 5,
+    "maxFixIterationsReview": 3,
+    "maxGate1RerunsPerReviewFix": 2,
+    "maxTotalCheckRuns": 10,
+    "maxAgentInvocations": 250,
+    "severityGate": {
+      "block": [
+        "critical",
+        "high"
+      ],
+      "fixOnce": [
+        "medium"
+      ],
+      "backlogOnly": [
+        "low"
+      ]
+    }
+  },
+  "codexReview": {
+    "enabled": true
+  },
+  "report": {
+    "enabled": true
+  },
+  "templateVersion": "af2b561fe1c6487fa328e8376e3216faefae30bc",
+  "installedAt": "2026-10-17"
+}

@@ -6,6 +6,7 @@
 - 目的:Whisper(whisper.cpp)で、録音中に途中経過を表示する「疑似リアルタイム処理」を追加する
 - 作業ブランチ:`feature/whisper-streaming`。main は本家と同じ状態に保つ
 - 手順の詳細(フォーク、配布スクリプト、調査と実装の依頼文、テストケース)は docs/fork-plan.md を参照する
+- 開発は claude-release-workflow で進める(リリースサイクルと運用は docs/development-workflow.md を参照する)
 
 ## 作業の進め方
 
