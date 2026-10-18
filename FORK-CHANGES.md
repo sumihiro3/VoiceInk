@@ -27,8 +27,11 @@
 | `docs/releases/release-1-whisper-partial-prototype/requirements.md` | release-1 の確定要件 | release-workflow の入力 |
 | `docs/releases/release-1-whisper-partial-prototype/e2e-verification.md` | release-1 の実機検証の手順(署名・SSH・配布の準備を含む)と記録表 | 実機でしか確かめられない受け入れ基準の手順(FR-07) |
 | `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnJapaneseSegmenter.swift` | 日本語の文を、ひらがな・カタカナ・漢字・記号の切れ目で区切る(「、」「。」は区切りの単位) | 空白のない日本語の文で、直した箇所を候補にできるようにするため(release-2 FR-01) |
+| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnReviewRetryPolicy.swift` | 審査の失敗を種類に分け、次にやり直すまでの秒数を決める(30・60・120・240秒、429 は `retryDelay` 以上、上限300秒) | 回数制限や時間切れで失敗した審査を、間を空けてやり直すため(release-2 FR-10、B3) |
+| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnReviewRetryScheduler.swift` | 審査の失敗を受けてやり直しを予約し、成功したら回数を戻す | 本家は次の直しが候補になるまでやり直さないため(release-2 FR-10、B3) |
+| `Tests/VoiceInkTests/AutoLearnReviewRetryPolicyTests.swift` | やり直しの間隔の計算と、審査の待ち時間の既定値のテスト | FR-10 AC-7 |
 | `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnForkReviewPrompt.swift` | 日本語向けの審査の指示文。返す JSON の形は本家と同じ | 言い回しだけの直しを却下し、誤認識の直しを登録するため(FR-02) |
-| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnReviewSettings.swift` | 審査の待ち時間(既定30秒、隠し設定 `AutoLearnReviewTimeoutSeconds`) | 本家の7秒では Gemini の応答が間に合わず時間切れになるため(FR-03) |
+| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnReviewSettings.swift` | 審査の待ち時間(既定90秒、隠し設定 `AutoLearnReviewTimeoutSeconds`。実機確認のあと30秒から変更) | 本家の7秒では Gemini の応答が間に合わず時間切れになるため。30.2秒かかって成功した例があったので90秒にした(FR-03) |
 | `VoiceInk/Infrastructure/Providers/Transcription/Whisper/Fork/WhisperVocabularyPrompt.swift` | 辞書の語彙を、新しい登録順に「、」でつなぎ、120文字以内で Whisper の初期プロンプトに足す | 登録した語を次の口述から認識されやすくするため(FR-04) |
 | `VoiceInk/Infrastructure/Providers/Transcription/Whisper/Fork/WhisperVocabularySource.swift` | ModelContainer を保持し、録音ごとに語彙を新しく読む | 語彙の追加・削除で変更通知が出ないため、毎回読んで次の録音から反映する(FR-04) |
 | `Tests/VoiceInkTests/*.swift`(`CorrectionDiffEngineUpstreamTests`・`CorrectionDiffEngineJapaneseTests`・`AutoLearnForkReviewPromptTests`・`WhisperVocabularyPromptTests` ほか) | 日本語の区切り、指示文、初期プロンプトの組み立ての単体テスト | 本家の挙動を壊していないことと、日本語対応の動きを `make test` で確かめるため(FR-06) |
@@ -53,6 +56,7 @@
 | `VoiceInk/Features/Dictionary/AutoLearn/CorrectionDiffEngine.swift` | 文を区切る呼び出しで、どちらかの文に日本語があれば `AutoLearnJapaneseSegmenter` を使う(数行と private の補助のみ) | 日本語の直しを候補にするため(FR-01、FR-07)。32文字の上限は変えない |
 | `VoiceInk/Features/Dictionary/AutoLearn/AutoLearnAIReviewer.swift` | `systemPrompt` を `AutoLearnForkReviewPrompt.text` に差し替え(本家の `reviewPrompt` は残す) | 日本語向けの審査にするため(FR-02、FR-07) |
 | `VoiceInk/Features/Enhancement/State/AIService.swift` | `reviewAutoLearnCandidates` の `timeout` を `AutoLearnReviewSettings.timeout` に差し替え | 審査の時間切れを避けるため(FR-03、FR-07)。`EnhancementRequestSettings.timeout` の7秒は変えない |
+| `VoiceInk/Features/Dictionary/AutoLearn/AutoLearnService.swift` | 審査の成功時・失敗時に `AutoLearnReviewRetryScheduler` を呼ぶ2行と、`retryPendingReviewIfIdle()` を追加 | 失敗した審査を間を空けてやり直すため(FR-10)。進行中の審査は取り消さない |
 | `VoiceInk/Features/Modes/State/ModeRuntimeConfiguration.swift` | Whisper の `requestContext` の prompt を `WhisperVocabularyPrompt.resolvedPrompt` に差し替え | 語彙を初期プロンプトに入れるため(FR-04、FR-07)。途中経過の provider は `prompt: nil` のまま |
 | `VoiceInk/App/VoiceInk.swift` | `WhisperVocabularySource.register(container:)` を1行追加 | 語彙の取得元(ModelContainer)を起動時に渡すため(FR-04、FR-07) |
 | `Makefile` | `test` ターゲットと `.PHONY` への追記(`VoiceInkTests` のみ、作業フォルダは `.test-build`) | 単体テストを `make test` で実行するため(FR-06) |

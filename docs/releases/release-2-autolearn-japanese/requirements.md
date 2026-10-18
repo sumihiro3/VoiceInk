@@ -2,7 +2,7 @@
 
 - リリース識別子:release-2-autolearn-japanese(本家の辞書の自動登録「Auto Learn」の日本語対応と、語彙を Whisper に渡す処理)
 - ステータス: 確定
-- 作成日:2026-10-18(2026-10-18 の実機確認のあと、FR-09 AC-3 を書き直した。理由はスコープの確定の表の最後の行)
+- 作成日:2026-10-18(2026-10-18 の実機確認のあと、FR-09 AC-3 を書き直し、FR-03 AC-1 の既定値を変え、FR-10 を足した。理由はスコープの確定の表)
 - 参照資料:docs/releases/release-1-whisper-partial-prototype/handoff.md(次のリリースの候補「辞書の自動登録」)、docs/ARCHITECTURE.md(規約)、CLAUDE.md、本家の Auto Learn(`VoiceInk/Features/Dictionary/AutoLearn/`)、whisper.cpp `0c7be69` の `src/whisper.cpp:7101`(初期プロンプトの上限)
 
 ## 背景と目的
@@ -45,6 +45,7 @@ Whisper(large-v3-turbo)で口述すると、固有の言葉や技術用語を誤
 | 単体テスト | このリリースで、テストの仕組みと `make test` を足す。日本語の区切りや指示文など、純粋な処理が中心になるため(release-1 では M2 で足す予定だった) |
 | ターミナル(Ghostty)と VS Code | このリリースでは扱わない。known-issues に記録する |
 | FR-09 AC-3 の書き直し(実機確認のあと) | 元の AC-3(同じ文をもう一度話すと正しく出る)は、1文1回の結果で決まり、語の難しさで結果が大きく変わる。実機確認では、語彙8語が初期プロンプトに入っても、話した文の1語目(英字2語の製品名)が毎回違う誤り方で出て、満たせなかった。そこで、録音を同じ条件で認識し直し、release-2 前後の初期プロンプトで登録語の正解数を比べる形に変える。似た音の別の誤り方にも単語置換を当てる対応(案 B)は release-3 の候補とする(known-issues B4) |
+| 審査の失敗への対応(実機確認のあと、B3) | 実機確認で審査の失敗が3回出た。macOS の通信ログでは、Gemini の応答が30.2秒かかった成功例と30秒での時間切れ、503(混雑)と429(回数制限)があった。LLMKit は 429・5xx を1秒・2秒後にやり直すだけで、回数制限の最中には同じ 429 が返る。本家は失敗した候補を待ち行列に戻すだけで、次の直しが候補になるまでやり直さない。そこで、審査の待ち時間の既定を90秒にし(FR-03 AC-1)、失敗したら間を空けて自動でやり直す処理を足す(FR-10) |
 | CLAUDE.md の更新 | 決定事項に「辞書の自動登録(本家の Auto Learn)の日本語対応もこのフォークで行う。途中経過の表示(M2〜M6)は release-3 以降に再開する」を追記する。ビルドと動作確認の署名の確認コマンドは、FR-05 で配るアプリが変わるため `.local-build/Build/Products/Release/VoiceInk.app` に直す |
 | 本家との衝突 | 本家は Auto Learn を作り替え中(未マージのブランチ `codex/optional-ai-dictionary-review`、20ファイル)。本家のファイルへの変更は呼び出しを差し替える数行に限り、処理は新しいファイルに置く |
 
@@ -79,7 +80,7 @@ Whisper(large-v3-turbo)で口述すると、固有の言葉や技術用語を誤
 
 - 場所: `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnReviewSettings.swift`(新規)
 
-- AC-1: 審査の待ち時間を UserDefaults のキー `AutoLearnReviewTimeoutSeconds` から読む。値が無い・0以下なら既定の30秒
+- AC-1: 審査の待ち時間を UserDefaults のキー `AutoLearnReviewTimeoutSeconds` から読む。値が無い・0以下なら既定の90秒(実機確認のあとに30秒から変更。30.2秒かかって成功した例があったため)
 - AC-2: AI 整形の待ち時間(`EnhancementRequestSettings.timeout`、既定7秒)は変えない。AI 整形の動作は変わらない
 
 ### FR-04: 語彙を Whisper の初期プロンプトに入れる(優先度: 必須)
@@ -158,6 +159,21 @@ CLAUDE.md の署名の確認コマンド(`codesign -dv --verbose=2 ~/Downloads/V
 - AC-5: 却下の確認(手動検証必須) — 言い回しだけを直したとき(例:「どちらがいいですか」を「どっちがいいですか」に直す)は、審査の結果が `rejected` になり、辞書が増えない
 - AC-6: 無音で語彙が出ないこと(手動検証必須) — 語彙が登録された状態で、何も話さずに5秒録音して止める。貼り付けられた文字に語彙(Claude Code・Codex など)が含まれない。release-1 では、VAD を切ると話していない定型文が最後に足された。初期プロンプトの語が出てしまうのと同じ現象なので、語彙を足したことで悪化していないかを確かめる
 - AC-7: 既存の動作(手動検証必須) — 録音停止から貼り付けまでの流れが今までどおり動く。途中経過の表示(隠し設定 `WhisperStreamingEnabled` がオン)も release-1 と同じように出る
+
+### FR-10: 審査が失敗したら、間を空けて自動でやり直す(優先度: 必須)
+
+- 場所: `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnReviewRetryPolicy.swift`(新規)、`VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnReviewRetryScheduler.swift`(新規)、`VoiceInk/Features/Dictionary/AutoLearn/AutoLearnService.swift`(結線)
+
+実機確認のあとに足した(既知課題 B3)。
+
+- AC-1: 時間切れ、HTTP の 429・500・502・503・504、通信エラーで審査が失敗したら、新しい直しを待たずに、30・60・120・240秒の間隔で最大4回、審査をやり直す。400 などそれ以外の失敗ではやり直さない。審査のタイミングが「手動」のときもやり直さない
+- AC-2: 429 の応答本文に Gemini の待ち時間(`"retryDelay": "47s"` の形)があれば、その秒数+1秒以上待つ。待つ秒数の上限は300秒
+- AC-3: 審査が成功したら、失敗の回数を0に戻し、予約していたやり直しを取り消す。4回やり直しても失敗したら回数を0に戻し、候補は今までどおり待ち行列に残す(次に新しい直しの審査が失敗したら、また1回目から数える)
+- AC-4: やり直すときに審査が進行中なら、何もしない(進行中の審査を取り消さない)
+- AC-5: 失敗の種類と HTTP の状態だけを `Logger(subsystem: "com.prakashjoshipax.voiceink", category: "AutoLearnReviewRetry")` で `.public` に出す(形式 `Auto Learn review retry scheduled kind=… status=… attempt=… delay=…s`)。応答本文は出さない
+- AC-6: `AutoLearnService.swift` の変更は、失敗時と成功時に FR-10 の処理を呼ぶ行と、「審査が進行中でなければ始める」関数1つだけ
+- AC-7: `make test` で、AC-1〜AC-3 の間隔の計算(やり直す失敗・やり直さない失敗・回数の上限・`retryDelay` の読み取り・上限300秒)と、FR-03 の既定値90秒を確かめるテストが通る
+- AC-8: 実機での確認(手動検証必須) — 審査の待ち時間を一時的に1秒にして(`defaults write com.prakashjoshipax.VoiceInk AutoLearnReviewTimeoutSeconds -int 1`)直しを1つ候補にすると、時間切れのあと `retry scheduled kind=timeout attempt=1 delay=30s` が出る。設定を消すと(`defaults delete com.prakashjoshipax.VoiceInk AutoLearnReviewTimeoutSeconds`)、新しい口述なしで30秒後に審査がやり直されて成功する
 
 ## 非機能要件
 

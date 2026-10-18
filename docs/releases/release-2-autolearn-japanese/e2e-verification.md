@@ -163,6 +163,26 @@ W=$TMPDIR/b4 && PROMPT="こんにちは、お元気ですか？お会いでき�
 - 英字2語の製品名(短い文の1語目)は、9通りのどの書き方でもほぼ正しく出なかった。正しく出たのは、話した順に2語だけを並べたときだけで、語順を逆にすると出なかった。並べ方にとても左右される(known-issues B4)
 - 再口述(合否に使わない): AC-2 のあとに同じ文を話すと、`vocabularyTerms=8 promptChars=96` で、1語目は1回目と違う誤り方になり、2語目は登録されていなかったので直らなかった
 
+## 3-3. 審査の失敗からのやり直し(FR-10 AC-8)
+
+審査の待ち時間を一時的に1秒にして、わざと時間切れにする。やり直しの予約が出たら設定を消し、既定の90秒でやり直しが成功するのを見る。
+
+```bash
+ssh mbp "defaults write com.prakashjoshipax.VoiceInk AutoLearnReviewTimeoutSeconds -int 1"
+```
+
+MacBook Pro で、直しが候補になる文を1つ口述して直す(例: Chrome の入力欄で、カタカナで出た製品名を英字に直す)。ログに `retry scheduled` が出たら、すぐに設定を消す。
+
+```bash
+ssh mbp "defaults delete com.prakashjoshipax.VoiceInk AutoLearnReviewTimeoutSeconds"
+```
+
+```bash
+cd /opt/dev/VoiceInk && ssh mbp "/usr/bin/log show --last 5m --info --predicate 'subsystem == \"com.prakashjoshipax.voiceink\" AND category IN {\"AutoLearn\", \"AutoLearnAIReview\", \"AutoLearnReviewRetry\"}'" > logs/mbp-retry-$(date +%H%M).log
+```
+
+期待: `Auto Learn AI review failed … code=8` → `retry scheduled kind=timeout status=0 attempt=1 delay=30s` → 30秒後に新しい口述なしで `Auto Learn review started` → `Auto Learn review completed`。
+
 ## 4. 実施記録
 
 ビルドコミットは、第1節で `deployed <短縮コミット> to mbp` と出た値を書く。メモに口述内容と直した文字は書かない(件数・秒数・結果の種類のみ)。
@@ -181,6 +201,7 @@ W=$TMPDIR/b4 && PROMPT="こんにちは、お元気ですか？お会いでき�
 | 2026-10-18 | 52cfa5a | AC-5 却下の確認 | 満たした | `rejected=1`、`apply completed without dictionary changes` |
 | 2026-10-18 | 52cfa5a | AC-6 無音で語彙が出ないこと | 満たした | 5秒の無音録音で `Batch fallback completed elapsed=0.043s chars=0`。貼られた文字なし |
 | 2026-10-18 | 52cfa5a | AC-7 既存の動作 | 満たした | 9回とも途中経過が出た(最初の文字まで 1.84〜2.31秒)。停止後は batch fallback(0.04〜1.19秒)の結果が貼られた |
+| 2026-10-18 | f8ab7de+未コミットの FR-10 | FR-10 AC-8 審査の失敗からのやり直し | 満たした | 第 3-3 節。1秒で時間切れ → `retry scheduled kind=timeout attempt=1 delay=30s` → 30秒後に新しい口述なしでやり直し → 6秒で成功、単語置換1件・語彙1件を登録。429・5xx のやり直しは単体テストのみで、実機では確かめていない |
 
 ## 5. 困ったとき
 
@@ -190,5 +211,5 @@ W=$TMPDIR/b4 && PROMPT="こんにちは、お元気ですか？お会いでき�
 | `deploy-mbp.sh` が「更新されていません」で止まる | `make local` が成果物を作り直していない。`.local-build/` の状態を確かめ、`make local` を単独で実行して原因を見る |
 | `deploy-mbp.sh` が「ハッシュが一致しません」で止まる | rsync が途中で失敗した可能性。MacBook Pro のアプリを終了して配り直す |
 | 認識し直しても初期プロンプトの違いで結果が変わらない | whisper-cli に `-mc 0` を付けていないか確かめる。付けると初期プロンプトが捨てられる(第 3-2 節) |
-| `AI review failed` が出る | 審査の待ち時間(隠し設定 `AutoLearnReviewTimeoutSeconds`、既定30秒)を延ばして試す。それでも出るならネットワークか Gemini の設定を見る |
+| `AI review failed` が出る | `AutoLearnReviewRetry` のログで種類と HTTP の状態を見る。時間切れ・429・5xx なら自動でやり直す(FR-10)。macOS の通信ログ(`process == "VoiceInk"` の CFNetwork の `response_status=`)でも状態が分かる。待ち時間は隠し設定 `AutoLearnReviewTimeoutSeconds`(既定90秒)で延ばせる |
 | 候補が作られない(Ghostty・VS Code) | 既知の課題 B1・B2([known-issues.md](../../known-issues.md))。AC の対象アプリではない |

@@ -51,13 +51,6 @@ VoiceInk フォーク(Whisper 途中経過表示) の差分レビュー（敵対
 - 現象: VS Code のエディタでは、入力欄の中身が0文字で返る。直した文字を取れないため、候補が作られない。
 - 対応方針: VS Code の設定 `editor.accessibilitySupport` を `on` にすると読める可能性があるが、未確認。確かめて、読めるなら手順を e2e-verification.md に足し、読めないなら対象外として記録する。
 
-### B3. 審査が時間切れや HTTP のエラーで失敗することがある
-
-- severity: medium（release-2 の実機確認 FR-09 AC-1 由来、起票日: 2026-10-18）
-- 場所: `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnReviewSettings.swift`、`VoiceInk/Features/Enhancement/State/AIService.swift` の `reviewAutoLearnCandidates`
-- 現象: 2026-10-18 の実機確認(ビルド 52cfa5a)で、9件の候補の審査中に `Auto Learn AI review failed` が3回出た。1回は開始からちょうど30秒で時間切れ(`LLMKitError` code=8)。2回は code=3(LLMKit のエラーの並びから HTTP のエラーと推測。ログに中身は出ない)。どれも次の審査で自動で再審査され、最終的に全件が審査された。code=3 は、同じ Gemini を使う AI 整形の呼び出しと近い時刻に出ている
-- 対応方針: 要壁打ち(HTTP のステータスを数値だけログに出して原因を確かめる。AI 整形と重ならないよう審査を少し遅らせる、待ち時間を延ばす、などを実測して決める)
-
 ### B4. 登録した語が、次の口述で正しく出ないことがある(似た音の別の誤り方に単語置換が当たらない)
 
 - severity: medium（release-2 の実機確認 FR-09 AC-3 由来、起票日: 2026-10-18。調査のあと high から下げた）
@@ -77,5 +70,6 @@ VoiceInk フォーク(Whisper 途中経過表示) の差分レビュー（敵対
 | N1 | FR-04 AC-6 の120文字超過のテストが、重複した語でデータを作っていたため超過の分岐を通らず失敗した。語を重複しない値に直した | release-2-autolearn-japanese(FR-04 AC-6) |
 | N2 | N1 のテスト1件の失敗で `make test` が通らなかった。N1 の修正後に `make test` が16件すべて成功 | release-2-autolearn-japanese(FR-06 AC-3) |
 | N3 | `FORK-CHANGES.md` に `CLAUDE.md` と `docs/whisper-streaming-investigation.md` の release-2 の変更行が無かった。2行を追記した | release-2-autolearn-japanese(FR-08 AC-3) |
+| B3 | 審査が時間切れ(応答に30秒前後かかる)や Gemini の 503・429 で失敗し、次の直しまでやり直されなかった。待ち時間の既定を90秒にし、失敗したら30・60・120・240秒の間隔で自動でやり直すようにした(429 は `retryDelay` 以上待つ)。実機で時間切れからの自動のやり直しと成功を確認 | release-2-autolearn-japanese(FR-03 AC-1、FR-10) |
 
 <!-- 解決した項目はバックログから削除せずこの表へ移動し、解決リリース(対応 FR 番号つき)を記録する -->

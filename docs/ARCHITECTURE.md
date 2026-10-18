@@ -88,6 +88,7 @@ Auto Learn(貼り付けた文字を人が直したら辞書に登録する本家
   - `Features/Enhancement/State/AIService.swift:789`(審査の `timeout` を `AutoLearnReviewSettings.timeout` に)
   - `Features/Modes/State/ModeRuntimeConfiguration.swift:19`(`WhisperPrompt.resolvedPrompt` を `WhisperVocabularyPrompt.resolvedPrompt` に)
   - `App/VoiceInk.swift:96`(`WhisperVocabularySource.register(container:)` を1行足す)
+  - `Features/Dictionary/AutoLearn/AutoLearnService.swift` の審査の成功時・失敗時(`AutoLearnReviewRetryScheduler` を呼ぶ2行)と、`retryPendingReviewIfIdle()`(審査が進行中でなければ始める関数を1つ足す)。審査の失敗から間を空けてやり直すため(FR-10)
 
 ### 5-2. 直した文字・候補・審査の結果・語彙・初期プロンプトの文字列を `.public` でログに出さない
 
