@@ -93,6 +93,7 @@ struct VoiceInkApp: App {
 
         container = resolvedContainer
         DictionaryService.cleanUpDictionaryContent(context: resolvedContainer.mainContext, source: "launch")
+        WhisperVocabularySource.register(container: resolvedContainer)
 
         // Initialize services with proper sharing of instances
         let aiService = AIService()

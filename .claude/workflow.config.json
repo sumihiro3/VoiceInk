@@ -14,6 +14,11 @@
       "key": "build",
       "cmd": "make build",
       "cwd": "."
+    },
+    {
+      "key": "test",
+      "cmd": "make test",
+      "cwd": "."
     }
   ],
   "reviewDimensions": [
@@ -90,7 +95,8 @@
       "final-output": "F",
       "fork-diff": "D",
       "check:check": "N",
-      "check:build": "B"
+      "check:build": "B",
+      "check:test": "B"
     },
     "defaultCategory": "N"
   },

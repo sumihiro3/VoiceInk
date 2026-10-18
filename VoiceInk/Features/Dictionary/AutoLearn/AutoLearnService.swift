@@ -196,6 +196,12 @@ actor AutoLearnService {
         }
     }
 
+    /// 審査が進行中でなければ、待ち行列の候補の審査を始める(`AutoLearnReviewRetryScheduler` から呼ぶ)。
+    func retryPendingReviewIfIdle() async {
+        guard reviewTask == nil else { return }
+        await schedulePendingReview()
+    }
+
     func pendingReviewCount() async throws -> Int {
         try await pendingQueue.pendingCount()
     }
@@ -502,6 +508,7 @@ actor AutoLearnService {
             let rejectedCount = reviewResult.reviewDecisions.filter {
                 $0.learningAction == .rejectCorrection
             }.count
+            await AutoLearnReviewRetryScheduler.shared.reviewDidSucceed()
             logger.notice(
                 "Auto Learn review completed replacementAndVocabulary=\(replacementAndVocabularyCount, privacy: .public) replacementOnly=\(replacementOnlyCount, privacy: .public) vocabularyOnly=\(vocabularyOnlyCount, privacy: .public) rejected=\(rejectedCount, privacy: .public) discarded=\(reviewResult.unresolvedReviews.count, privacy: .public)"
             )
@@ -512,6 +519,9 @@ actor AutoLearnService {
             }
             await finishReviewTask(generation: generation)
             log(error, message: "Auto Learn AI review failed; candidates remain queued")
+            await AutoLearnReviewRetryScheduler.shared.reviewDidFail(error) {
+                await AutoLearnService.shared.retryPendingReviewIfIdle()
+            }
             return
         }
 

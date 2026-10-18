@@ -22,8 +22,9 @@
 - 開発は Mac mini、動作確認は MacBook Pro(M1 Pro)で行う
 - `make check`:ビルド環境の確認
 - `make dev`:Mac mini 上での簡易確認(VoiceInk Dev.app)
-- `scripts/deploy-mbp.sh`:`make local` でビルドし、MacBook Pro の /Applications/VoiceInk.app を置き換えて再起動する
-- 署名は Apple Development を使う(`codesign -dv --verbose=2 ~/Downloads/VoiceInk.app` で確認)。ad-hoc 署名だと MacBook Pro 側の権限が配るたびに外れる
+- `make test`:VoiceInkTests だけを実行する(作業フォルダは `.test-build`)
+- `scripts/deploy-mbp.sh`:`make local` でビルドし、`.local-build/Build/Products/Release/VoiceInk.app` を MacBook Pro の /Applications/VoiceInk.app に置き換えて再起動する。バイナリの更新時刻が開始時刻より古ければ中止し、手元と MacBook Pro の `shasum -a 256` が一致したときだけ deployed と表示する
+- 署名は Apple Development を使う(`codesign -dv --verbose=2 .local-build/Build/Products/Release/VoiceInk.app` で確認)。ad-hoc 署名だと MacBook Pro 側の権限が配るたびに外れる
 - 計測ログの取得(Mac mini から実行):
 
 ```bash
@@ -64,6 +65,7 @@ ssh mbp "/usr/bin/log show --last 5m --info --predicate 'subsystem == \"com.prak
 - MacBook Pro の普段使いの VoiceInk は、当面フォーク版で置き換える。複雑な開発が出てきたら別アプリに分ける
 - 録音停止後は Mode で選んだ Whisper モデル(large-v3-turbo)で全音声を処理し直す(provider の `stopDisposition = .useBatchFallback`。release-1 で決定)
 - Mode のモデルは large-v3-turbo の量子化版(q5_0)でよい。2026-10-18 の比較で、量子化なしと誤りの箇所が同じだった(release-1 で決定)
+- 辞書の自動登録(Auto Learn)の日本語対応もこのフォークで行う。途中経過 M2〜M6 は release-3 以降に再開する(release-2 で決定)
 
 ## 未決事項(M0 の調査結果を見て決める)
 

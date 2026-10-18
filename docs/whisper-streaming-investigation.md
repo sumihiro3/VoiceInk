@@ -222,7 +222,7 @@ whisper.cpp(Whisper を C/C++ で動かすライブラリ)を呼ぶ入口は、`
 | sampling(単語の選び方) | `WHISPER_SAMPLING_GREEDY`(各時点で最も確からしい候補を選ぶ。Beam search は使わない) | `LibWhisper.swift:36` |
 | n_threads(計算に使うスレッド数) | `max(1, min(8, CPU数 - 2))`。最大8、最小1 | `:35`、`:64`。CPU数は `ProcessInfo.processInfo.processorCount`(`:167-169`) |
 | language | Mode で選んだ言語。`auto` のときは `nil`(自動判定) | `:38-47` |
-| initial_prompt | `prompt` があるときだけ渡す。録音後の処理では `context.prompt ?? ""` を渡す | `:49-57`、呼び出し側 `WhisperTranscriptionService.swift:62` |
+| initial_prompt | `prompt` があるときだけ渡す。録音後の処理では `context.prompt ?? ""` を渡す。release-2(2026-10-18)で、この `prompt` は既存プロンプトの後ろに辞書の語彙(120文字以内)を足した値になった(`ModeRuntimeConfiguration.swift:19` が `WhisperVocabularyPrompt.resolvedPrompt` を呼ぶ)。途中経過の provider は prompt nil のまま | `:49-57`、呼び出し側 `WhisperTranscriptionService.swift:62` |
 | print_realtime | `true`(whisper.cpp が認識結果を stderr に出す。詳しくは⑧) | `:59`。whisper.h は `print_realtime` に「avoid it, use callback instead」と注記(`whisper.h:501`、コミット `0c7be69`) |
 | print_progress / print_special | `false` | `:60`、`:62` |
 | print_timestamps | `true` | `:61` |
@@ -254,7 +254,7 @@ whisper.cpp(Whisper を C/C++ で動かすライブラリ)を呼ぶ入口は、`
 
 ### モデルの保存場所と大きさ
 
-- 保存場所は `~/Library/Application Support/com.prakashjoshipax.VoiceInk/WhisperModels/`(`VoiceInk/App/VoiceInk.swift:119-121`)。拡張子 `.bin` のファイルだけをモデルとして拾う(`WhisperModelManager.swift:131-138`)。ユーザーが取り込んだモデルも同じ一覧に入る。
+- 保存場所は `~/Library/Application Support/com.prakashjoshipax.VoiceInk/WhisperModels/`(`VoiceInk/App/VoiceInk.swift:120-122`(release-2 で `:96` に1行足したため、調査時点の `:119-121` から1行ずれた。2026-10-18))。拡張子 `.bin` のファイルだけをモデルとして拾う(`WhisperModelManager.swift:131-138`)。ユーザーが取り込んだモデルも同じ一覧に入る。
 - 一覧にある主なモデルと大きさ(`VoiceInk/Features/ModelLibrary/Models/TranscriptionModelRegistry.swift`):
 
 | モデル名 | 大きさ | 行 |
@@ -467,6 +467,7 @@ M1 を実装した結果、上の表の案から次の点が変わった。
   - release-1 で更新(2026-10-17): `WHISPER_CPP_COMMIT`(`0c7be69…`)を足し、固定コミットへ checkout して、HEAD が違うときだけ framework を作り直すようにした。`git pull` はやめた。
 - `scripts/deploy-mbp.sh` は、調査時点ではリポジトリに無かった(手順は `docs/fork-plan.md` の「手順2-2」`:86`)。動作確認は MacBook Pro で行う(CLAUDE.md)ので、M1 の合格基準を確かめるために必要だった。
   - release-1 で更新(2026-10-17): `scripts/deploy-mbp.sh` を新設した。`make local` でビルドし、MacBook Pro の /Applications/VoiceInk.app を置き換えて再起動する。接続確認・署名確認つき。
+  - release-2 で更新(2026-10-18): 配るアプリを `~/Downloads` から `.local-build/Build/Products/Release/VoiceInk.app` に変えた。バイナリの更新時刻が開始時刻より古ければ中止し、rsync 後に手元と MacBook Pro の `shasum -a 256` が一致したときだけ deployed と表示する。
 - Mac mini で `make build` を通すには、cmake と Metal Toolchain が必要だった(2026-10-17 に導入済み)。別のマシンで開発するときは、先に `make check` で確かめる。
 - この文書の `VoiceInk/...swift:行番号` は調査時点(2026-10-17)のもの。本家(`upstream`)の更新で動くので、使う前に開いて確かめる。
 - 「推測:」と書いた箇所は、一次ファイルで確認できていない。M1 の前後で実機・コードで確かめる。
