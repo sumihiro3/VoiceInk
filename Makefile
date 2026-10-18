@@ -7,7 +7,7 @@ LOCAL_DERIVED_DATA := $(CURDIR)/.local-build
 LOCAL_CODESIGN_IDENTITY ?=
 RUN_APP_NAME ?= VoiceInk
 
-.PHONY: all clean whisper setup build local check healthcheck help dev run release release-setup
+.PHONY: all clean whisper setup build local check healthcheck help dev run release release-setup test
 
 # Default target
 all: check build
@@ -59,6 +59,16 @@ build: setup
 		-skipPackagePluginValidation \
 		-skipMacroValidation \
 		build
+
+# Unit tests only (-only-testing is required: the UI test target would wait for automation permission)
+test: setup
+	xcodebuild test -project VoiceInk.xcodeproj -scheme VoiceInk -configuration Debug -destination 'platform=macOS' \
+		-derivedDataPath "$${TEST_DERIVED_DATA:-$(CURDIR)/.test-build}" \
+		-only-testing:VoiceInkTests CODE_SIGN_IDENTITY="-" \
+		CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM="" \
+		CODE_SIGN_ENTITLEMENTS="$(CURDIR)/VoiceInk/VoiceInk.local.entitlements" \
+		-skipPackagePluginValidation \
+		-skipMacroValidation
 
 # Build locally with stable Apple Development signing when available.
 local: check setup
