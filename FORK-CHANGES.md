@@ -25,7 +25,7 @@
 | `VoiceInk/Infrastructure/Providers/Transcription/Whisper/Streaming/WhisperStreamingProvider.swift` | Whisper の途中経過用 provider。1秒周期で直近音声を認識し、停止時は await せず中断する | 録音中の途中経過表示(FR-04) |
 | `VoiceInk/Infrastructure/Providers/Transcription/Whisper/Streaming/WhisperStreamingSettings.swift` | 途中経過の有効・無効、モデル名などの隠し設定のキーと既定値 | 設定キーを1か所に集めるため(FR-05) |
 | `docs/releases/release-1-whisper-partial-prototype/requirements.md` | release-1 の確定要件 | release-workflow の入力 |
-| `docs/releases/release-1-whisper-partial-prototype/e2e-verification.md` | release-1 の実機検証の手順と記録表 | 実機でしか確かめられない受け入れ基準の手順(FR-07) |
+| `docs/releases/release-1-whisper-partial-prototype/e2e-verification.md` | release-1 の実機検証の手順(署名・SSH・配布の準備を含む)と記録表 | 実機でしか確かめられない受け入れ基準の手順(FR-07) |
 
 ## 変更した既存ファイル
 

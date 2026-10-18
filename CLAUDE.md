@@ -27,7 +27,7 @@
 - 計測ログの取得(Mac mini から実行):
 
 ```bash
-ssh mbp "log show --last 5m --info --predicate 'subsystem == \"com.prakashjoshipax.voiceink\"'" > logs/mbp-$(date +%H%M).log
+ssh mbp "/usr/bin/log show --last 5m --info --predicate 'subsystem == \"com.prakashjoshipax.voiceink\"'" > logs/mbp-$(date +%H%M).log
 ```
 
 ## 設計の要点
@@ -44,7 +44,7 @@ ssh mbp "log show --last 5m --info --predicate 'subsystem == \"com.prakashjoship
 ## マイルストーン
 
 - [x] M0 調査:既存のリアルタイム処理を読み、[`docs/whisper-streaming-investigation.md`](docs/whisper-streaming-investigation.md) にまとめる(コードは変更しない)
-- [ ] M1 表示だけの試作:1秒ごとに録音開始からの全音声を認識し、そのまま表示する
+- [x] M1 表示だけの試作:1秒ごとに録音開始からの全音声を認識し、そのまま表示する(計測結果は [`docs/releases/release-1-whisper-partial-prototype/e2e-verification.md`](docs/releases/release-1-whisper-partial-prototype/e2e-verification.md))
 - [ ] M2 確定処理:LocalAgreement で確定・未確定を分けて表示する
 - [ ] M3 窓の切り詰め:25秒超で確定済み区間をバッファから外す
 - [ ] M4 無音対策:VAD で無音時の認識を飛ばす
@@ -63,9 +63,10 @@ ssh mbp "log show --last 5m --info --predicate 'subsystem == \"com.prakashjoship
 - フォークは公開、個人の GitHub アカウント
 - MacBook Pro の普段使いの VoiceInk は、当面フォーク版で置き換える。複雑な開発が出てきたら別アプリに分ける
 - 録音停止後は Mode で選んだ Whisper モデル(large-v3-turbo)で全音声を処理し直す(provider の `stopDisposition = .useBatchFallback`。release-1 で決定)
+- Mode のモデルは large-v3-turbo の量子化版(q5_0)でよい。2026-10-18 の比較で、量子化なしと誤りの箇所が同じだった(release-1 で決定)
 
 ## 未決事項(M0 の調査結果を見て決める)
 
-- 途中経過用モデル(base / small / large-v3-turbo の量子化版)
+- 途中経過用モデル(base / small / large-v3-turbo の量子化版)。release-1 の計測で、base は速いが誤りが多く、q5_0 は正確だが1回の認識が1秒を超え続ける
 - 処理間隔と認識対象の上限の初期値
 - VAD を whisper.cpp 内蔵のものにするか、音量のしきい値で済ませるか
