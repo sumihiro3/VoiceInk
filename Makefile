@@ -2,7 +2,7 @@
 DEPS_DIR := $(HOME)/VoiceInk-Dependencies
 WHISPER_CPP_DIR := $(DEPS_DIR)/whisper.cpp
 WHISPER_CPP_COMMIT := 0c7be696371069e0baa2515ed7aa08d5a5473aa6
-FRAMEWORK_PATH :=$(WHISPER_CPP_DIR)/build-apple/whisper.xcframework
+FRAMEWORK_PATH := $(WHISPER_CPP_DIR)/build-apple/whisper.xcframework
 LOCAL_DERIVED_DATA := $(CURDIR)/.local-build
 LOCAL_CODESIGN_IDENTITY ?=
 RUN_APP_NAME ?= VoiceInk
