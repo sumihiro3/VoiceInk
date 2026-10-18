@@ -20,7 +20,7 @@ final class WhisperVocabularyPromptTests: XCTestCase {
     }
 
     func testOldTermsDroppedWhenOver120Characters() {
-        let terms = (0..<30).map { i in String(repeating: "あ", count: 9) + String(i % 10) }
+        let terms = (0..<30).map { i in String(repeating: "あ", count: 8) + String(format: "%02d", i) }
         let result = WhisperVocabularyPrompt.compose(basePrompt: "", terms: terms)
         XCTAssertLessThanOrEqual(result.count, WhisperVocabularyPrompt.maximumVocabularyCharacters)
         XCTAssertTrue(result.hasPrefix(terms[0]))
