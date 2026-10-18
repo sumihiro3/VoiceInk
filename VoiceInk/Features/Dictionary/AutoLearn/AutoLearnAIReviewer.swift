@@ -123,7 +123,7 @@ final class AutoLearnAIReviewer: @unchecked Sendable {
         )
         let responseText = try await aiService.reviewAutoLearnCandidates(
             payload: requestText,
-            systemPrompt: Self.reviewPrompt,
+            systemPrompt: AutoLearnForkReviewPrompt.text,
             provider: provider,
             modelName: modelName
         )

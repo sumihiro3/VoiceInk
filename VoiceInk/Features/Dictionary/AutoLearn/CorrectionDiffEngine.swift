@@ -31,8 +31,13 @@ enum CorrectionDiffEngine {
         let corrected = revision.corrected.precomposedStringWithCanonicalMapping
         guard original != corrected else { return [] }
 
-        let originalSegments = segments(in: original)
-        let correctedSegments = segments(in: corrected)
+        let usesJapaneseSegmenter =
+            AutoLearnJapaneseSegmenter.containsJapanese(original)
+            || AutoLearnJapaneseSegmenter.containsJapanese(corrected)
+        let originalSegments =
+            usesJapaneseSegmenter ? japaneseSegments(in: original) : segments(in: original)
+        let correctedSegments =
+            usesJapaneseSegmenter ? japaneseSegments(in: corrected) : segments(in: corrected)
         guard originalSegments.count <= AutoLearnLimits.maximumDiffSegments,
             correctedSegments.count <= AutoLearnLimits.maximumDiffSegments
         else {
@@ -118,6 +123,12 @@ enum CorrectionDiffEngine {
         }
 
         return results
+    }
+
+    private static func japaneseSegments(in text: String) -> [TextSegment] {
+        AutoLearnJapaneseSegmenter.segments(in: text).map {
+            TextSegment(text: String(text[$0.range]), range: $0.range, isBoundary: $0.isBoundary)
+        }
     }
 
     private static func segments(in text: String) -> [TextSegment] {
