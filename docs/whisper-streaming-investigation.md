@@ -8,6 +8,7 @@
 - 対象ブランチ: `release-0-whisper-investigation`(main は本家 `9ce98ec` と同じ状態)
 - 行番号について: `VoiceInk/...swift:行番号` はすべて調査時点のもの。本家の更新で動くので、使う前に開いて確かめる。
 - この文書には口述内容(実際の認識結果)を書かない。
+- release-1 の実装後の更新(2026-10-17): 調査時点の事実は残し、実装で前提が変わった箇所だけ「release-1 で更新」の注記を足した(①、⑦、⑧、⑨-3、⑩)。`StreamingTranscriptionService.swift` に行を足したため、このファイルの行番号は、調査時点の `:134` 付近より後ろで約3行、`:327` 付近より後ろで約6行ずれている(例: `createProvider` は `:310`、最後の `fatalError` は `:336`、`stopAndFinalize` は `:204`)。
 
 ---
 
@@ -62,6 +63,8 @@
 - `fatalError` のメッセージ自身が「`shouldUseRealtimeTranscription()` を先に確かめること」と書いている(`StreamingTranscriptionService.swift:331`)。
 
 したがって Whisper を足すなら、`supportsStreaming` を true にするだけでは足りず、`createProvider` に `.whisper` の分岐を同時に足さないと起動時に落ちる。この対の関係は⑦で扱う。
+
+> release-1 で更新(2026-10-17): `createProvider` に `.whisper` の分岐を足した(FluidAudio の後、クラウドの前。`WhisperStreamingProvider(modelsDirectory:)` を返す)。Whisper が `:336` の `fatalError` に落ちることはなくなった。Real-time の可否は `supportsStreaming` ではなく `TranscriptionRealtimeSupport.isAvailable` 側で切り替えた(⑦の更新を参照)。
 
 ### FluidAudio の3種と、Whisper のお手本になる理由
 
@@ -343,6 +346,20 @@ whisper.cpp(Whisper を C/C++ で動かすライブラリ)を呼ぶ入口は、`
 | `VoiceInk/Features/Recording/Workflows/TranscriptionServiceRegistry.swift:63-76` | `createSession` で `StreamingTranscriptionService` を作るとき、`model.provider == .whisper` なら `WhisperModelProvider`(モデルの置き場所と共有 context を知っている窓口。`WhisperModelProvider.swift:7`)を渡す。`fluidAudioService` を渡している `:71` と同じ形 | provider はモデルのパスなどを自分で知る必要がある。FluidAudio の前例に合わせる | M1 |
 | `VoiceInk/Infrastructure/Providers/Transcription/Whisper/LibWhisper.swift` | 途中経過用のパラメータで認識する関数と、区間・トークンの時刻を返す関数を足す。`fullTranscribe`(`:32`)と `getTranscription`(`:104`)は変えない。途中経過用では `print_realtime` を `false` にする(⑧-6) | 区間の時刻を今は読んでいない(④)。録音後の処理に影響を出さないため、別の関数にする | M1(時刻の API は M3) |
 
+### release-1(M1)での実装と、上の案との違い(2026-10-17 追記)
+
+M1 を実装した結果、上の表の案から次の点が変わった。
+
+| 項目 | 案 | 実装 | 変えた理由 |
+|---|---|---|---|
+| Real-time の可否 | `TranscriptionModel.swift` の `WhisperModel` が `supportsStreaming` を返す | `TranscriptionModel.swift` は変えず、`TranscriptionRealtimeSupport.isAvailable` が「`.whisper` かつ `WhisperStreamingSettings.isEnabled`」のとき true を返す | `supportsStreaming` を true にすると、既存の Whisper の Mode が黙って有効になる(⑧-7)。隠し設定(`WhisperStreamingSettings.isEnabled`、既定は無効)で囲めば、既定では何も変わらない |
+| provider への依存 | `WhisperModelProvider` を渡す | `StreamingTranscriptionService.init` に省略可能な `whisperModelsDirectory: URL?` を足し、`TranscriptionServiceRegistry.createSession` が `modelsDirectory` を渡す | provider は共有 context を使わず、モデルのファイルだけあれば足りる |
+| 途中経過用モデル | 未決(⑨-1) | 隠し設定 `WhisperStreamingModelName`、既定は `ggml-base` | ⑨-1 の提案どおり base から始める。M1 の計測で比べる |
+| 停止時の扱い | 処理中の回を待つか取り消す(⑧-8) | `LibWhisper.swift` の `transcribePartial` に abort_callback(認識を途中で止める仕組み)を付け、停止・取り消し時は中断して、認識の完了を待たずに戻る。専用 context の解放は、切り離した後始末 Task が認識の終了後に行う | 停止直後の batch 処理と CPU・GPU を取り合わないため |
+| `print_realtime` | 途中経過用では `false`(⑧-6) | `transcribePartial` で `false` | 案どおり |
+
+`LibWhisper.swift` の追加は `transcribePartial`・中断フラグ・結果型のみで、`fullTranscribe` と `getTranscription` は変えていない。区間の時刻の API は M3 で足す(まだ無い)。`stopDisposition` は案どおり `.useBatchFallback` 固定、間隔1秒・最小16,000サンプルも案どおり。
+
 ### M2 で表示の型を変える5か所
 
 画面に渡るのが `String` 1本のため(②)、確定と未確定を分けるには次の5か所で型を変える。最小にする案は、`partialTranscript: String` はそのまま残し、確定部分と未確定部分を持つ値を別に足して、`ShowLiveTranscript` の View だけがそれを読む形にすること。こうすると、他のプロバイダ(FluidAudio、クラウド)の表示は変わらない。
@@ -409,6 +426,8 @@ whisper.cpp(Whisper を C/C++ で動かすライブラリ)を呼ぶ入口は、`
 
 **決めるのは人である。** 以下は提案で、決定ではない。CLAUDE.md の「未決事項」は、このリリース(release-0)では書き換えない。M1 の計測結果を見て、人が決めたうえで、別のリリースで CLAUDE.md の「決定事項」に移す。
 
+> release-1 で更新(2026-10-17): 3 の「録音停止後のやり直し」は、release-1 の実装(`WhisperStreamingProvider.stopDisposition = .useBatchFallback`)に合わせ、CLAUDE.md で未決事項から決定事項へ移った。1(base から始める)は隠し設定の既定値 `ggml-base` として入ったが、small との比較計測は未実施で未決のまま。2 と 4 も未決。
+
 ### 1. 途中経過用モデル(base / small / large-v3-turbo の量子化版)
 
 | 項目 | 内容 |
@@ -444,8 +463,10 @@ whisper.cpp(Whisper を C/C++ で動かすライブラリ)を呼ぶ入口は、`
 ## ⑩ 前提と注意
 
 - `whisper.h` の行番号は、`~/VoiceInk-Dependencies/whisper.cpp` のコミット `0c7be69`(2026-10-12)で確かめたもの(`carry_initial_prompt` は `:528`、`whisper_full_get_segment_t0` は `:640`、`whisper_full_get_token_t0` は `:675`、`whisper_vad_init_from_file_with_params` は `:711`、`whisper_vad_detect_speech_no_reset` は `:721`、`whisper_vad_segments_from_probs` は `:734`)。
-- `Makefile` の `whisper` ターゲットは、whisper.cpp をコミットを固定せずに clone する(`Makefile:29-40`)。ビルドのたびに HEAD が変わりうるので、**M1 の前にコミットを固定すること**(`0c7be69` を候補とする)。API の差(`whisper.h` の関数名や引数)で、後からビルドが壊れるのを防ぐため。
-- `scripts/deploy-mbp.sh` は、まだリポジトリに無い(`scripts/` には `release.sh` と `setup-release-notarization.sh` だけがある)。手順は `docs/fork-plan.md` の「手順2-2」(`:86`)にある。**M1 の前に作ること**。動作確認は MacBook Pro で行う(CLAUDE.md)ので、これが無いと M1 の合格基準を確かめられない。
+- `Makefile` の `whisper` ターゲットは、調査時点では whisper.cpp をコミットを固定せずに clone し、既存なら `git pull` していた(`Makefile:29-40`)。API の差で後からビルドが壊れるのを防ぐため、M1 の前にコミットを固定する必要があった。
+  - release-1 で更新(2026-10-17): `WHISPER_CPP_COMMIT`(`0c7be69…`)を足し、固定コミットへ checkout して、HEAD が違うときだけ framework を作り直すようにした。`git pull` はやめた。
+- `scripts/deploy-mbp.sh` は、調査時点ではリポジトリに無かった(手順は `docs/fork-plan.md` の「手順2-2」`:86`)。動作確認は MacBook Pro で行う(CLAUDE.md)ので、M1 の合格基準を確かめるために必要だった。
+  - release-1 で更新(2026-10-17): `scripts/deploy-mbp.sh` を新設した。`make local` でビルドし、MacBook Pro の /Applications/VoiceInk.app を置き換えて再起動する。接続確認・署名確認つき。
 - Mac mini で `make build` を通すには、cmake と Metal Toolchain が必要だった(2026-10-17 に導入済み)。別のマシンで開発するときは、先に `make check` で確かめる。
 - この文書の `VoiceInk/...swift:行番号` は調査時点(2026-10-17)のもの。本家(`upstream`)の更新で動くので、使う前に開いて確かめる。
 - 「推測:」と書いた箇所は、一次ファイルで確認できていない。M1 の前後で実機・コードで確かめる。

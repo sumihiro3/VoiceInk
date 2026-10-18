@@ -14,7 +14,7 @@ MacBook Pro(M1 Pro)で口述して確かめる項目の一覧。各リリース�
 3. 試したら Mac mini からログを取る(`logs/` はコミットしない)
 
 ```bash
-ssh mbp "log show --last 5m --info --predicate 'subsystem == \"com.prakashjoshipax.voiceink\"'" > logs/mbp-$(date +%H%M).log
+ssh mbp "/usr/bin/log show --last 5m --info --predicate 'subsystem == \"com.prakashjoshipax.voiceink\"'" > logs/mbp-$(date +%H%M).log
 ```
 
 ## テストケース

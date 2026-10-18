@@ -110,6 +110,65 @@ actor WhisperContext {
         return transcription
     }
 
+    /// 録音中の途中経過用に認識する。actor の状態(language / prompt など)は使わず、引数だけで完結する。
+    /// 中断か失敗かは whisper_full の戻り値(どちらも負値になりうる)ではなく `abortFlag` で判定する。
+    func transcribePartial(
+        samples: [Float],
+        language: String?,
+        prompt: String?,
+        abortFlag: WhisperAbortFlag
+    ) -> WhisperPartialTranscriptionResult {
+        guard let context = context else { return .failed(code: -1) }
+        if abortFlag.isAborted { return .aborted }
+
+        var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
+        params.print_realtime = false
+        params.print_progress = false
+        params.print_timestamps = false
+        params.print_special = false
+        params.translate = false
+        params.vad = false
+        params.no_context = true
+        params.single_segment = false
+        params.temperature = 0.2
+        params.offset_ms = 0
+        params.n_threads = Int32(max(1, min(8, cpuCount() - 2)))
+        params.abort_callback = { userData in
+            guard let userData else { return false }
+            return Unmanaged<WhisperAbortFlag>.fromOpaque(userData).takeUnretainedValue().isAborted
+        }
+        params.abort_callback_user_data = Unmanaged.passUnretained(abortFlag).toOpaque()
+
+        let effectiveLanguage: String? = {
+            guard let language, !language.isEmpty, language != "auto" else { return nil }
+            return language
+        }()
+
+        let code: Int32 = withExtendedLifetime(abortFlag) {
+            withOptionalCString(effectiveLanguage) { languagePtr in
+                withOptionalCString(prompt) { promptPtr in
+                    params.language = languagePtr
+                    params.initial_prompt = promptPtr
+                    return samples.withUnsafeBufferPointer { buffer in
+                        whisper_full(context, params, buffer.baseAddress, Int32(buffer.count))
+                    }
+                }
+            }
+        }
+
+        if abortFlag.isAborted { return .aborted }
+        if code != 0 {
+            logger.error("Partial whisper_full failed. code: \(code, privacy: .public)")
+            return .failed(code: code)
+        }
+
+        var text = ""
+        for i in 0..<whisper_full_n_segments(context) {
+            text += String(cString: whisper_full_get_segment_text(context, i))
+        }
+        return .success(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
     static func createContext(path: String) async throws -> WhisperContext {
         let whisperContext = WhisperContext()
         try await whisperContext.initializeModel(path: path)
@@ -166,4 +225,36 @@ actor WhisperContext {
 
 fileprivate func cpuCount() -> Int {
     ProcessInfo.processInfo.processorCount
+}
+
+/// 実行中の `transcribePartial` を actor の外から中断するためのフラグ。
+final class WhisperAbortFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var aborted = false
+
+    /// 中断を要求する。以後 `isAborted` は true を返し続ける。
+    func abort() {
+        lock.lock()
+        aborted = true
+        lock.unlock()
+    }
+
+    /// 中断が要求済みか。whisper.cpp の abort_callback から別スレッドで読まれる。
+    var isAborted: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return aborted
+    }
+}
+
+/// 途中経過用認識の結果。
+enum WhisperPartialTranscriptionResult {
+    case success(String)
+    case aborted
+    case failed(code: Int32)
+}
+
+fileprivate func withOptionalCString<R>(_ string: String?, _ body: (UnsafePointer<CChar>?) -> R) -> R {
+    guard let string else { return body(nil) }
+    return string.withCString { body($0) }
 }

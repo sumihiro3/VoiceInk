@@ -27,7 +27,7 @@ Whisper の途中経過表示(`feature/whisper-streaming`)を実装・レビュ�
 ### 1-4. Whisper 以外のモデルの動作を変えない
 
 - 規約: Parakeet・Nemotron・クラウドの provider 選択と挙動はそのまま。Whisper 用の分岐は `createProvider` に足すだけで、既存の分岐の順序・条件を書き換えない。
-- 根拠: `Features/Recording/Streaming/StreamingTranscriptionService.swift:307-335` の `createProvider(for:)` が provider を選ぶ唯一の場所。FluidAudio の Nemotron / Unified / 通常が `:308-326`、クラウドが `:327-334`。現状 `.whisper` 専用の分岐は無く、クラウドの guard に落ちて `:330` の `fatalError` になる。つまり、Real-time の可否判定を通ったモデルだけがここに来る前提を崩さない(実装時は可否判定と分岐を必ずセットで変える)。
+- 根拠: `Features/Recording/Streaming/StreamingTranscriptionService.swift:310-341` の `createProvider(for:)` が provider を選ぶ唯一の場所。FluidAudio の Nemotron / Unified / 通常が `:311-329`、`.whisper` が `:330-332`、クラウドが `:333-340`。`.whisper` の分岐は `WhisperStreamingSettings.isEnabled` による可否判定(`TranscriptionRealtimeSupport.isAvailable`)とセットで追加済み(FluidAudio 分岐の後、クラウドの guard の前)。Real-time の可否判定を通ったモデルだけがここに来る前提を崩さない(分岐と可否判定は必ずセットで変える)。
 
 ### 1-5. 新しい処理は新しいファイル。既存ファイルの変更は最小限で、FORK-CHANGES.md に記録する
 
@@ -69,6 +69,11 @@ Whisper の途中経過表示(`feature/whisper-streaming`)を実装・レビュ�
 
 - 規約: 途中経過を UI に反映する直前に、(1) その録音の `startID` が現在のものと一致し、(2) `recordingState == .recording` であることを確認する。録音が止まった・取り消された・次の録音が始まったあとに届いた結果は捨てる。provider 側も `disconnect` / cancel 後はイベントを出さない。
 - 根拠: `Features/Recording/Workflows/VoiceInkEngine.swift:242-243`(録音ごとに `startID` を作り `activeRecordingStartID` に保持)、`:328-336`(`onPartialTranscript` の中で `activeRecordingStartID == startID` と `recordingState == .recording` を確認してから `partialTranscript` に代入)。
+
+### 3-4. 録音停止時に途中認識の完了を待たない
+
+- 規約: 停止・取り消しのときは、abort callback で進行中の認識の中断を指示する。provider の `disconnect` / `commit` は進行中の認識を await せずにすぐ戻る。中断後・停止後に返ってきた結果は捨て、イベントを流さない。途中経過専用 context の解放は、provider 内部の後始末で認識の終了後に行う(`whisper_full` の実行中に `whisper_free` しない)。
+- 根拠: `Features/Recording/Streaming/StreamingTranscriptionService.swift:216-220`(`stopAndFinalize` の `.useBatchFallback` 分岐は `cleanupStreaming()` を await してから `.requiresBatchFallback` を返す)と `:507`(`cleanupStreaming()` の `await provider?.disconnect()`)。呼び出し元が `disconnect` の完了を待つため、provider が認識の完了を待つと、その時間が録音停止から貼り付けまでの遅延にそのまま加算される([known-issues.md](known-issues.md) の F1)。実装は `Infrastructure/Providers/Transcription/Whisper/Streaming/WhisperStreamingProvider.swift:215`(`shutdown` は停止フラグ→中断→ループの cancel→イベント終了の順で await せず戻る)と `:237` 付近(切り離した後始末 Task が認識の終了を待ってから解放する)、`Infrastructure/Providers/Transcription/Whisper/LibWhisper.swift:136-140`(`transcribePartial` が `abort_callback` を設定する)。
 
 ## 4. 関連文書(AC-4)
 
