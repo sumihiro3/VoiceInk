@@ -26,6 +26,14 @@
 | `VoiceInk/Infrastructure/Providers/Transcription/Whisper/Streaming/WhisperStreamingSettings.swift` | 途中経過の有効・無効、モデル名などの隠し設定のキーと既定値 | 設定キーを1か所に集めるため(FR-05) |
 | `docs/releases/release-1-whisper-partial-prototype/requirements.md` | release-1 の確定要件 | release-workflow の入力 |
 | `docs/releases/release-1-whisper-partial-prototype/e2e-verification.md` | release-1 の実機検証の手順(署名・SSH・配布の準備を含む)と記録表 | 実機でしか確かめられない受け入れ基準の手順(FR-07) |
+| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnJapaneseSegmenter.swift` | 日本語の文を、ひらがな・カタカナ・漢字・記号の切れ目で区切る(「、」「。」は区切りの単位) | 空白のない日本語の文で、直した箇所を候補にできるようにするため(release-2 FR-01) |
+| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnForkReviewPrompt.swift` | 日本語向けの審査の指示文。返す JSON の形は本家と同じ | 言い回しだけの直しを却下し、誤認識の直しを登録するため(FR-02) |
+| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnReviewSettings.swift` | 審査の待ち時間(既定30秒、隠し設定 `AutoLearnReviewTimeoutSeconds`) | 本家の7秒では Gemini の応答が間に合わず時間切れになるため(FR-03) |
+| `VoiceInk/Infrastructure/Providers/Transcription/Whisper/Fork/WhisperVocabularyPrompt.swift` | 辞書の語彙を、新しい登録順に「、」でつなぎ、120文字以内で Whisper の初期プロンプトに足す | 登録した語を次の口述から認識されやすくするため(FR-04) |
+| `VoiceInk/Infrastructure/Providers/Transcription/Whisper/Fork/WhisperVocabularySource.swift` | ModelContainer を保持し、録音ごとに語彙を新しく読む | 語彙の追加・削除で変更通知が出ないため、毎回読んで次の録音から反映する(FR-04) |
+| `Tests/VoiceInkTests/*.swift`(`CorrectionDiffEngineUpstreamTests`・`CorrectionDiffEngineJapaneseTests`・`AutoLearnForkReviewPromptTests`・`WhisperVocabularyPromptTests` ほか) | 日本語の区切り、指示文、初期プロンプトの組み立ての単体テスト | 本家の挙動を壊していないことと、日本語対応の動きを `make test` で確かめるため(FR-06) |
+| `docs/releases/release-2-autolearn-japanese/requirements.md` | release-2 の確定要件 | release-workflow の入力 |
+| `docs/releases/release-2-autolearn-japanese/e2e-verification.md` | release-2 の実機検証の手順(配布、ハッシュの確認、口述、ログの取り方)と記録表 | 実機でしか確かめられない受け入れ基準の手順(FR-09) |
 
 ## 変更した既存ファイル
 
@@ -42,3 +50,14 @@
 | `docs/ARCHITECTURE.md` | 3-4「録音停止時に途中認識の完了を待たない」を追加し、1-4 の根拠を更新 | F1 の規約化と、`.whisper` 分岐追加への追従(FR-06) |
 | `docs/known-issues.md` | F1 を解決済みログへ移動し、P1 を新規起票 | F1 を release-1 で解決したため。P1 は release-1 で見つかった未対応の課題の記録(FR-06) |
 | `CLAUDE.md` | 録音停止後のやり直しの方針を「未決事項」から「決定事項」へ移動 | release-1 で `.useBatchFallback` に決めたため(FR-06) |
+| `VoiceInk/Features/Dictionary/AutoLearn/CorrectionDiffEngine.swift` | 文を区切る呼び出しで、どちらかの文に日本語があれば `AutoLearnJapaneseSegmenter` を使う(数行と private の補助のみ) | 日本語の直しを候補にするため(FR-01、FR-07)。32文字の上限は変えない |
+| `VoiceInk/Features/Dictionary/AutoLearn/AutoLearnAIReviewer.swift` | `systemPrompt` を `AutoLearnForkReviewPrompt.text` に差し替え(本家の `reviewPrompt` は残す) | 日本語向けの審査にするため(FR-02、FR-07) |
+| `VoiceInk/Features/Enhancement/State/AIService.swift` | `reviewAutoLearnCandidates` の `timeout` を `AutoLearnReviewSettings.timeout` に差し替え | 審査の時間切れを避けるため(FR-03、FR-07)。`EnhancementRequestSettings.timeout` の7秒は変えない |
+| `VoiceInk/Features/Modes/State/ModeRuntimeConfiguration.swift` | Whisper の `requestContext` の prompt を `WhisperVocabularyPrompt.resolvedPrompt` に差し替え | 語彙を初期プロンプトに入れるため(FR-04、FR-07)。途中経過の provider は `prompt: nil` のまま |
+| `VoiceInk/App/VoiceInk.swift` | `WhisperVocabularySource.register(container:)` を1行追加 | 語彙の取得元(ModelContainer)を起動時に渡すため(FR-04、FR-07) |
+| `Makefile` | `test` ターゲットと `.PHONY` への追記(`VoiceInkTests` のみ、作業フォルダは `.test-build`) | 単体テストを `make test` で実行するため(FR-06) |
+| `.gitignore` | `.test-build/` を追加 | テストの作業フォルダをコミットしないため |
+| `scripts/deploy-mbp.sh` | 配るアプリを `.local-build/Build/Products/Release/VoiceInk.app` にし、バイナリの時刻の確認と配布後の `shasum -a 256` の比較を追加 | 古いビルドを配る事故を防ぎ、配った中身を確かめるため(FR-05) |
+| `.claude/workflow.config.json` | `checks` に `test` を、`knownIssues.categoryMap` に `check:test` を追加 | `make test` を検査に含めるため(FR-06) |
+| `docs/ARCHITECTURE.md` | 5章「Auto Learn のフォーク側の変更」を追加 | Auto Learn の変更の規約と根拠を残すため(FR-08) |
+| `docs/known-issues.md` | B1(Ghostty)・B2(VS Code)を起票 | 実機確認で見つかった未対応の課題の記録(FR-08) |
