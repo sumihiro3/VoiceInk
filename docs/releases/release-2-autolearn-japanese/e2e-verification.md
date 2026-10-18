@@ -95,9 +95,9 @@ AC-1 の前に、辞書(設定の Dictionary)の単語置換と語彙の件数�
 - [ ] AC-2 辞書への登録
   - 手順: AC-1 のあと、VoiceInk の設定の Dictionary を開く
   - 期待: 直した語の単語置換(例: ロードコード → Claude Code)か語彙が、準備で控えた件数より増えている
-- [ ] AC-3 次の口述への反映
-  - 手順: AC-2 のあと、同じ文をもう一度口述する(30秒未満)
-  - 期待: 「Claude Code」「Codex」と貼り付けられる。`WhisperVocabularyPrompt` のログに `vocabularyTerms=` が 1 以上で出る
+- [ ] AC-3 語彙による認識の改善(2026-10-18 に書き直し。手順は第 3-2 節)
+  - 手順: AC-1・AC-4 の録音を Mac mini で認識し直し、release-2 前後の初期プロンプトで登録語の正解数を比べる。あわせて、AC-2 のあとに同じ文をもう一度口述する(30秒未満。合否には使わない)
+  - 期待: release-2 の初期プロンプトで、登録語の出現箇所の過半数が正しい表記で出て、release-2 前より多い
 - [ ] AC-4 長い文
   - アプリ: テキストエディット
   - 話す文: 「今日はメジャーリーグの移籍市場と、ナ・リーグのポスティングについて詳しく話しました。」
@@ -114,6 +114,55 @@ AC-1 の前に、辞書(設定の Dictionary)の単語置換と語彙の件数�
   - 手順: 隠し設定 `WhisperStreamingEnabled` をオンにして、短い文を口述する
   - 期待: 録音停止から貼り付けまでが今までどおり動く。途中経過の表示も release-1 と同じように出る
 
+## 3-2. 語彙による認識の比較(AC-3)
+
+アプリと同じ条件で、初期プロンプトだけを変えて録音を認識し直す。録音・モデル・結果は一時領域(`$TMPDIR`)に置き、リポジトリに入れない。
+
+### 準備(Mac mini で)
+
+whisper-cli を、アプリと同じ whisper.cpp のコミット(`0c7be69`)からビルドする。元のフォルダは変えない。
+
+```bash
+W=$TMPDIR/b4 && mkdir -p $W/wav $W/models && cmake -S ~/VoiceInk-Dependencies/whisper.cpp -B $W/build -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON && cmake --build $W/build --target whisper-cli -j 8
+```
+
+モデルと VAD のモデルを MacBook Pro から持ってくる。
+
+```bash
+W=$TMPDIR/b4 && scp "mbp:Library/Application Support/com.prakashjoshipax.VoiceInk/WhisperModels/ggml-large-v3-turbo-q5_0.bin" $W/models/ && scp mbp:/Applications/VoiceInk.app/Contents/Resources/ggml-silero-v5.1.2.bin $W/models/
+```
+
+録音は `~/Library/Application Support/com.prakashjoshipax.VoiceInk/Recordings/<ID>.wav` にある。ID はログの `Using batch fallback for … file=<ID>.wav` の行で分かる。比べたい録音を `$W/wav/` に `scp` する。
+
+### 認識し直す
+
+`PROMPT` に初期プロンプトを入れて実行する。空にすると初期プロンプトなし。設定はアプリの `LibWhisper.swift` の `fullTranscribe` に合わせてある(greedy、`best_of` 5、`temperature` 0.2、VAD のしきい値0.5・最短の発話250ms・最短の無音100ms・前後の余白30ms・重なり0.1)。
+
+```bash
+W=$TMPDIR/b4 && PROMPT="こんにちは、お元気ですか？お会いできて嬉しいです。" && for w in $W/wav/*.wav; do printf '%s\t' "$(basename $w)"; $W/build/bin/whisper-cli -m $W/models/ggml-large-v3-turbo-q5_0.bin -f "$w" -l ja -bs 1 -bo 5 -tp 0.2 -nt -np --vad -vm $W/models/ggml-silero-v5.1.2.bin -vt 0.5 -vspd 250 -vsd 100 -vp 30 -vo 0.1 ${PROMPT:+--prompt "$PROMPT"} 2>/dev/null | tr -d '\n'; echo; done
+```
+
+- **`-mc`(`--max-context`)は付けない。** `-mc 0` は初期プロンプトの枠を0にするので、プロンプトが捨てられる(`src/whisper.cpp:7101`、`:7285`)。アプリの `no_context = true` は whisper.cpp の既定値(`:6099`)で、whisper-cli も既定のまま同じになる
+- release-2 の初期プロンプトは、挨拶文のあとに辞書の語彙を新しい順に「、」でつなぎ、最後に「。」を付けたもの。アプリのログ `vocabularyTerms=… promptChars=…` の文字数と合うことを確かめる
+
+### 結果(2026-10-18、ビルド 52cfa5a、録音7本・各3回。「古い順」だけ1回)
+
+同じ録音・同じプロンプトでは、3回とも同じ結果だった(`temperature` 0.2 でも、結果のばらつきは出なかった)。下の数は、録音7本に出てくる登録語の出現箇所11か所のうち、正しい表記で出た数。中黒の有無だけの違い(登録した表記に中黒があり、認識結果に無い)は正しいと数えた。
+
+| 初期プロンプト | 正しく出た数 | メモ(数値のみ) |
+| --- | --- | --- |
+| なし | 2 / 11 | |
+| (1) release-2 前(挨拶文だけ) | 0 / 11 | |
+| (2) release-2(挨拶文+語彙8語、新しい順) | 6 / 11 | 8回目の録音は、アプリが貼り付けた結果と同じになった(比べ方がアプリと合っている) |
+| (2) に、登録されていなかった1語を足したもの | 8 / 11 | |
+| 語彙だけ(挨拶文なし) | 5 / 11 | |
+| 語彙を文の形にしたもの(足した1語を含む) | 5 / 11 | |
+| 語彙を古い順にしたもの | 7 / 11 | 1回だけ実行 |
+
+- 判定: (2) は 6/11 で過半数、(1) の 0/11 より多い。AC-3 を満たした
+- 英字2語の製品名(短い文の1語目)は、9通りのどの書き方でもほぼ正しく出なかった。正しく出たのは、話した順に2語だけを並べたときだけで、語順を逆にすると出なかった。並べ方にとても左右される(known-issues B4)
+- 再口述(合否に使わない): AC-2 のあとに同じ文を話すと、`vocabularyTerms=8 promptChars=96` で、1語目は1回目と違う誤り方になり、2語目は登録されていなかったので直らなかった
+
 ## 4. 実施記録
 
 ビルドコミットは、第1節で `deployed <短縮コミット> to mbp` と出た値を書く。メモに口述内容と直した文字は書かない(件数・秒数・結果の種類のみ)。
@@ -127,7 +176,7 @@ AC-1 の前に、辞書(設定の Dictionary)の単語置換と語彙の件数�
 | 2026-10-18 | 52cfa5a | AC-1 短い文の登録: Claude デスクトップ | 候補あり | 候補2件→登録 |
 | 2026-10-18 | 52cfa5a | AC-1 短い文の登録: Obsidian | 候補あり | 候補1件→登録 |
 | 2026-10-18 | 52cfa5a | AC-2 辞書への登録 | 満たした | 単語置換 +8件、語彙 +8件(`Auto Learn apply completed` の合計: 2+4+2) |
-| 2026-10-18 | 52cfa5a | AC-3 次の口述への反映 | 満たしていない | `vocabularyTerms=8 promptChars=96` で初期プロンプトに語彙が入ったが、1語目が前回と違う誤り方になり、登録済みの単語置換に一致しなかった。2語目は登録されていなかった(短い文の1回目の候補で、2か所の直しのうち1か所だけが審査を通った) |
+| 2026-10-18 | 52cfa5a | AC-3 語彙による認識の改善 | 満たした | 第 3-2 節。登録語の正解数: release-2 前 0/11 → release-2 6/11。再口述(合否に使わない)は1語目が違う誤り方になり、正しく出なかった |
 | 2026-10-18 | 52cfa5a | AC-4 長い文 | 満たした | 41文字の文で候補2件→2件とも登録 |
 | 2026-10-18 | 52cfa5a | AC-5 却下の確認 | 満たした | `rejected=1`、`apply completed without dictionary changes` |
 | 2026-10-18 | 52cfa5a | AC-6 無音で語彙が出ないこと | 満たした | 5秒の無音録音で `Batch fallback completed elapsed=0.043s chars=0`。貼られた文字なし |
@@ -140,5 +189,6 @@ AC-1 の前に、辞書(設定の Dictionary)の単語置換と語彙の件数�
 | ログ取得で `zsh:log:1: too many arguments` と出る | `log` が zsh の組み込みを指す。`/usr/bin/log show …` と書く(上のコマンドは書き換え済み) |
 | `deploy-mbp.sh` が「更新されていません」で止まる | `make local` が成果物を作り直していない。`.local-build/` の状態を確かめ、`make local` を単独で実行して原因を見る |
 | `deploy-mbp.sh` が「ハッシュが一致しません」で止まる | rsync が途中で失敗した可能性。MacBook Pro のアプリを終了して配り直す |
+| 認識し直しても初期プロンプトの違いで結果が変わらない | whisper-cli に `-mc 0` を付けていないか確かめる。付けると初期プロンプトが捨てられる(第 3-2 節) |
 | `AI review failed` が出る | 審査の待ち時間(隠し設定 `AutoLearnReviewTimeoutSeconds`、既定30秒)を延ばして試す。それでも出るならネットワークか Gemini の設定を見る |
 | 候補が作られない(Ghostty・VS Code) | 既知の課題 B1・B2([known-issues.md](../../known-issues.md))。AC の対象アプリではない |

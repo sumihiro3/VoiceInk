@@ -60,6 +60,6 @@
 | `scripts/deploy-mbp.sh` | 配るアプリを `.local-build/Build/Products/Release/VoiceInk.app` にし、バイナリの時刻の確認と配布後の `shasum -a 256` の比較を追加 | 古いビルドを配る事故を防ぎ、配った中身を確かめるため(FR-05) |
 | `.claude/workflow.config.json` | `checks` に `test` を、`knownIssues.categoryMap` に `check:test` を追加 | `make test` を検査に含めるため(FR-06) |
 | `docs/ARCHITECTURE.md` | 5章「Auto Learn のフォーク側の変更」を追加 | Auto Learn の変更の規約と根拠を残すため(FR-08) |
-| `docs/known-issues.md` | B1(Ghostty)・B2(VS Code)を起票 | 実機確認で見つかった未対応の課題の記録(FR-08) |
+| `docs/known-issues.md` | B1(Ghostty)・B2(VS Code)を起票。実機確認の未達から B3(審査の失敗)・B4(似た音の別の誤り方に単語置換が当たらない。案 B を release-3 の候補として記録)を起票。受け入れ基準の照合で起票した N1〜N3 を直して解決済みログへ移動 | 実機確認で見つかった未対応の課題の記録(FR-08、FR-09) |
 | `CLAUDE.md` | ビルドと動作確認に `make test` を追加し、`deploy-mbp.sh` と署名の確認の説明を `.local-build` のアプリに合わせた。決定事項に「辞書の自動登録の日本語対応もこのフォークで行う。途中経過 M2〜M6 は release-3 以降」を追加 | release-2 で配るアプリの場所が変わり、扱う範囲を決めたため(FR-05、FR-06、スコープの確定) |
 | `docs/whisper-streaming-investigation.md` | initial_prompt の行に語彙を足すようになったことを追記し、`VoiceInk.swift` の行番号のずれと `deploy-mbp.sh` の変更を記録 | 調査メモの前提が release-2 の実装で変わったため(FR-04、FR-05) |

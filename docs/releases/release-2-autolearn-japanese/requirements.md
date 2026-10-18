@@ -2,7 +2,7 @@
 
 - リリース識別子:release-2-autolearn-japanese(本家の辞書の自動登録「Auto Learn」の日本語対応と、語彙を Whisper に渡す処理)
 - ステータス: 確定
-- 作成日:2026-10-18
+- 作成日:2026-10-18(2026-10-18 の実機確認のあと、FR-09 AC-3 を書き直した。理由はスコープの確定の表の最後の行)
 - 参照資料:docs/releases/release-1-whisper-partial-prototype/handoff.md(次のリリースの候補「辞書の自動登録」)、docs/ARCHITECTURE.md(規約)、CLAUDE.md、本家の Auto Learn(`VoiceInk/Features/Dictionary/AutoLearn/`)、whisper.cpp `0c7be69` の `src/whisper.cpp:7101`(初期プロンプトの上限)
 
 ## 背景と目的
@@ -44,6 +44,7 @@ Whisper(large-v3-turbo)で口述すると、固有の言葉や技術用語を誤
 | 配布スクリプト | `~/Downloads` を経由せず、ビルドしたフォルダ(`.local-build/`)から直接配る。配ったあと、手元と MacBook Pro のバイナリが一致することを確かめる |
 | 単体テスト | このリリースで、テストの仕組みと `make test` を足す。日本語の区切りや指示文など、純粋な処理が中心になるため(release-1 では M2 で足す予定だった) |
 | ターミナル(Ghostty)と VS Code | このリリースでは扱わない。known-issues に記録する |
+| FR-09 AC-3 の書き直し(実機確認のあと) | 元の AC-3(同じ文をもう一度話すと正しく出る)は、1文1回の結果で決まり、語の難しさで結果が大きく変わる。実機確認では、語彙8語が初期プロンプトに入っても、話した文の1語目(英字2語の製品名)が毎回違う誤り方で出て、満たせなかった。そこで、録音を同じ条件で認識し直し、release-2 前後の初期プロンプトで登録語の正解数を比べる形に変える。似た音の別の誤り方にも単語置換を当てる対応(案 B)は release-3 の候補とする(known-issues B4) |
 | CLAUDE.md の更新 | 決定事項に「辞書の自動登録(本家の Auto Learn)の日本語対応もこのフォークで行う。途中経過の表示(M2〜M6)は release-3 以降に再開する」を追記する。ビルドと動作確認の署名の確認コマンドは、FR-05 で配るアプリが変わるため `.local-build/Build/Products/Release/VoiceInk.app` に直す |
 | 本家との衝突 | 本家は Auto Learn を作り替え中(未マージのブランチ `codex/optional-ai-dictionary-review`、20ファイル)。本家のファイルへの変更は呼び出しを差し替える数行に限り、処理は新しいファイルに置く |
 
@@ -152,7 +153,7 @@ CLAUDE.md の署名の確認コマンド(`codesign -dv --verbose=2 ~/Downloads/V
 
 - AC-1: 短い文の登録(手動検証必須) — Chrome・テキストエディット・Slack・Claude デスクトップ・Obsidian の5つで、「Claude Code と Codex、どちらがいいですか。」を口述し、誤った語を手で直して入力欄から離れる。ログに `Queued … candidate(s)` と `Auto Learn review completed` が出て、時間切れ(`AI review failed`)が出ない。審査の結果、`replacementAndVocabulary` か `replacementOnly` が1件以上になる
 - AC-2: 辞書への登録(手動検証必須) — AC-1 のあと、VoiceInk の設定の Dictionary に、直した語の単語置換(例: ロードコード → Claude Code)か語彙が増えている
-- AC-3: 次の口述への反映(手動検証必須) — AC-2 のあと、同じ文をもう一度口述すると、「Claude Code」「Codex」と貼り付けられる。`WhisperVocabularyPrompt` のログに `vocabularyTerms=` が1以上で出る
+- AC-3: 語彙による認識の改善(手動検証必須) — AC-1・AC-4 の録音(WAV)を MacBook Pro から Mac mini に持ってきて、アプリと同じ whisper.cpp(`0c7be69`)・モデル・設定(greedy、`best_of` 5、`temperature` 0.2、VAD のしきい値0.5)の whisper-cli で認識し直す。初期プロンプトは (1) release-2 前(挨拶文だけ)と (2) release-2(挨拶文+AC-2 のあとの辞書の語彙を新しい順に)の2通り。録音に含まれる登録語の出現箇所のうち正しい表記で出た数が、(2) で過半数になり、かつ (1) より多い。あわせて、AC-2 のあとに同じ文をもう一度口述した結果(正しく出たか、`vocabularyTerms=` の値)を記録する。この再口述の結果は合否に使わない
 - AC-4: 長い文(手動検証必須) — テキストエディットで「今日はメジャーリーグの移籍市場と、ナ・リーグのポスティングについて詳しく話しました。」を口述し、誤った語を直すと、ログに `Queued … candidate(s)` が出る
 - AC-5: 却下の確認(手動検証必須) — 言い回しだけを直したとき(例:「どちらがいいですか」を「どっちがいいですか」に直す)は、審査の結果が `rejected` になり、辞書が増えない
 - AC-6: 無音で語彙が出ないこと(手動検証必須) — 語彙が登録された状態で、何も話さずに5秒録音して止める。貼り付けられた文字に語彙(Claude Code・Codex など)が含まれない。release-1 では、VAD を切ると話していない定型文が最後に足された。初期プロンプトの語が出てしまうのと同じ現象なので、語彙を足したことで悪化していないかを確かめる
