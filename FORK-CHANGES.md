@@ -35,8 +35,21 @@
 | `VoiceInk/Infrastructure/Providers/Transcription/Whisper/Fork/WhisperVocabularyPrompt.swift` | 辞書の語彙を、新しい登録順に「、」でつなぎ、120文字以内で Whisper の初期プロンプトに足す | 登録した語を次の口述から認識されやすくするため(FR-04) |
 | `VoiceInk/Infrastructure/Providers/Transcription/Whisper/Fork/WhisperVocabularySource.swift` | ModelContainer を保持し、録音ごとに語彙を新しく読む | 語彙の追加・削除で変更通知が出ないため、毎回読んで次の録音から反映する(FR-04) |
 | `Tests/VoiceInkTests/*.swift`(`CorrectionDiffEngineUpstreamTests`・`CorrectionDiffEngineJapaneseTests`・`AutoLearnForkReviewPromptTests`・`WhisperVocabularyPromptTests` ほか) | 日本語の区切り、指示文、初期プロンプトの組み立ての単体テスト | 本家の挙動を壊していないことと、日本語対応の動きを `make test` で確かめるため(FR-06) |
+| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnTerminalTarget.swift` | Ghostty(bundle id `com.mitchellh.ghostty`)の判定、Ghostty 専用の定数(読み取りの上限 1,500,000 UTF-16、目印の探索範囲など)、読み取りの設定 `AutoLearnAXTextReadOptions`(`.standard`・`.ghostty`)、末尾にいちばん近い一致を探す純粋関数 | Ghostty の端末は画面の履歴ごと読むため、本家の上限(10万文字)と「ちょうど1か所」の一致では貼り付け位置を決められないため(release-3 FR-04) |
+| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnTerminalRevisionLocator.swift` | 端末の履歴から、貼り付けた文のあった行の前後の目印を使って、直す前と直したあとの文(`AutoLearnRevision`)を取り出す。止まった段階と目印の数も返す | 端末は目印が複数か所に出る・Enter で送ると並びが変わるため、本家の `FinalSnapshotDiffEngine` では直しを拾えない(B1。release-3 FR-01) |
+| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnTerminalSnapshotTracker.swift` | 見張り中に1秒ごとに端末を読み、最後に取れた直し1つと回数だけを持つ。間隔と時刻は差し替えられる | Enter で入力欄が空になる前の直しを失わないため(release-3 FR-02) |
+| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnDiagnostics.swift` | 確定させた理由(次の貼り付け・録音開始・フォーカス・60秒)と、止まった段階の enum。確定時のログの行を組み立てる純粋関数と、Logger(カテゴリ `AutoLearnDiagnostics`) | 直しを拾えなかったときに、どの段階で止まったかを実機のログだけで切り分けるため(release-3 FR-03)。口述内容は出さない |
+| `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnTerminalFinalizer.swift` | runtime が確定時に返す `AutoLearnFinishedObservation` を受け、Ghostty なら Tracker の判定、それ以外は本家の `FinalSnapshotDiffEngine.revision(from:)` で直しを決め、確定時のログを出す | 本家の呼び出し1か所の差し替えで済ませ、Ghostty 用の分岐を新しいファイルに閉じ込めるため(release-3 FR-01〜03) |
+| `Tests/VoiceInkTests/AutoLearnTerminalTargetTests.swift` | Ghostty の判定、末尾にいちばん近い一致、読み取りの設定のテスト | release-3 FR-04 AC-7 |
+| `Tests/VoiceInkTests/AutoLearnTerminalRevisionLocatorTests.swift` | 作り物の端末の履歴で、直しの取り出しと止まった段階を確かめるテスト | release-3 FR-01 |
+| `Tests/VoiceInkTests/AutoLearnTerminalSnapshotTrackerTests.swift` | 1秒ごとの読み取り・最後の直しの保持・時刻の差し替えのテスト | release-3 FR-02 |
+| `Tests/VoiceInkTests/AutoLearnDiagnosticsTests.swift` | 確定時のログの行の組み立てと、口述内容を含まないことのテスト | release-3 FR-03 |
+| `Tests/VoiceInkTests/FinalSnapshotDiffEngineUpstreamTests.swift` | 本家の `FinalSnapshotDiffEngine` の挙動(同一なら nil、目印が複数か所なら nil など)を固定するテスト | 本家の挙動を壊していないことを確かめるため(release-3 FR-04 AC-7) |
+| `Tests/VoiceInkTests/AutoLearnTerminalFixtures.swift` | Locator と Tracker のテストが共有する、作り物の端末の履歴 | テストの重複を避けるため(release-3) |
 | `docs/releases/release-2-autolearn-japanese/requirements.md` | release-2 の確定要件 | release-workflow の入力 |
 | `docs/releases/release-2-autolearn-japanese/e2e-verification.md` | release-2 の実機検証の手順(配布、ハッシュの確認、口述、ログの取り方)と記録表 | 実機でしか確かめられない受け入れ基準の手順(FR-09) |
+| `docs/releases/release-3-autolearn-ghostty/requirements.md` | release-3 の確定要件 | release-workflow の入力 |
+| `docs/releases/release-3-autolearn-ghostty/e2e-verification.md` | release-3 の実機検証(Ghostty で貼り付けた文を直す)の手順と記録表。参照するログキー(`usedTrackedRevision`・`tracked`、`reads=0`)が実装とずれている(known-issues A1) | 実機でしか確かめられない受け入れ基準の手順(release-3) |
 
 ## 変更した既存ファイル
 
@@ -57,6 +70,9 @@
 | `VoiceInk/Features/Dictionary/AutoLearn/AutoLearnAIReviewer.swift` | `systemPrompt` を `AutoLearnForkReviewPrompt.text` に差し替え(本家の `reviewPrompt` は残す) | 日本語向けの審査にするため(FR-02、FR-07) |
 | `VoiceInk/Features/Enhancement/State/AIService.swift` | `reviewAutoLearnCandidates` の `timeout` を `AutoLearnReviewSettings.timeout` に差し替え | 審査の時間切れを避けるため(FR-03、FR-07)。`EnhancementRequestSettings.timeout` の7秒は変えない |
 | `VoiceInk/Features/Dictionary/AutoLearn/AutoLearnService.swift` | 審査の成功時・失敗時に `AutoLearnReviewRetryScheduler` を呼ぶ2行と、`retryPendingReviewIfIdle()` を追加 | 失敗した審査を間を空けてやり直すため(FR-10)。進行中の審査は取り消さない |
+| `VoiceInk/Features/Dictionary/AutoLearn/AutoLearnAXTextReader.swift` | `textValue` と `markerSnapshot` に `AutoLearnAXTextReadOptions` の引数を足し、10万文字の上限判定の3か所を options の上限に差し替え。Ghostty のときは `string-for-range` を飛ばす。本家の定数 `maximumFieldUTF16Length` は変えない | Ghostty の画面の履歴は10万文字を超えるため。`AXNumberOfCharacters` が書記素数で、末尾が欠けるため(release-3 FR-04 AC-1・AC-4、ARCHITECTURE 5-4) |
+| `VoiceInk/Features/Dictionary/AutoLearn/AutoLearnAXRuntime.swift` | `Session` に bundle id と tracker を追加。貼り付けた範囲を決める箇所に Ghostty の分岐(末尾にいちばん近い一致)を差し込み。tracker の開始と、`session = nil` にする全経路での停止。`finishSnapshot` の戻り値を `AutoLearnFinishedObservation` に変更。診断ログの呼び出し | Ghostty のときだけ動きを変え、止まった段階をログに残すため(release-3 FR-02〜04)。他のアプリの経路は変えない |
+| `VoiceInk/Features/Dictionary/AutoLearn/AutoLearnService.swift`(release-3 の追加分) | 確定させた理由を `completeSession`・`persistFinishedSession` で持ち回す。`persistSnapshot` の `FinalSnapshotDiffEngine.revision` の呼び出しを `AutoLearnTerminalFinalizer` に差し替え | 確定の4経路(次の貼り付け・録音開始・フォーカス・60秒)をログで区別するため。Ghostty のときだけ Tracker の判定を使うため(release-3 FR-01、FR-03) |
 | `VoiceInk/Features/Modes/State/ModeRuntimeConfiguration.swift` | Whisper の `requestContext` の prompt を `WhisperVocabularyPrompt.resolvedPrompt` に差し替え | 語彙を初期プロンプトに入れるため(FR-04、FR-07)。途中経過の provider は `prompt: nil` のまま |
 | `VoiceInk/App/VoiceInk.swift` | `WhisperVocabularySource.register(container:)` を1行追加 | 語彙の取得元(ModelContainer)を起動時に渡すため(FR-04、FR-07) |
 | `Makefile` | `test` ターゲットと `.PHONY` への追記(`VoiceInkTests` のみ、作業フォルダは `.test-build`) | 単体テストを `make test` で実行するため(FR-06) |
@@ -66,4 +82,7 @@
 | `docs/ARCHITECTURE.md` | 5章「Auto Learn のフォーク側の変更」を追加 | Auto Learn の変更の規約と根拠を残すため(FR-08) |
 | `docs/known-issues.md` | B1(Ghostty)・B2(VS Code)を起票。実機確認の未達から B3(審査の失敗)・B4(似た音の別の誤り方に単語置換が当たらない。案 B を release-3 の候補として記録)を起票。受け入れ基準の照合で起票した N1〜N3 を直して解決済みログへ移動 | 実機確認で見つかった未対応の課題の記録(FR-08、FR-09) |
 | `CLAUDE.md` | ビルドと動作確認に `make test` を追加し、`deploy-mbp.sh` と署名の確認の説明を `.local-build` のアプリに合わせた。決定事項に「辞書の自動登録の日本語対応もこのフォークで行う。途中経過 M2〜M6 は release-3 以降」を追加 | release-2 で配るアプリの場所が変わり、扱う範囲を決めたため(FR-05、FR-06、スコープの確定) |
+| `CLAUDE.md`(release-3 の追加分) | 決定事項の「途中経過 M2〜M6 は release-3 以降」を「release-4 以降」に変更し、Ghostty 対応(release-3)を決定事項に追加 | release-3 で Ghostty の Auto Learn 対応を行うため、途中経過の再開時期が後ろにずれた |
+| `docs/ARCHITECTURE.md`(release-3 の追加分) | 5-1 に release-3 の追加ファイルを追記。5-2 のログ規約に `AutoLearnDiagnostics` を追加。5-4「Ghostty では string-for-range を使わない」を新設 | Ghostty 対応の規約と根拠を残すため(release-3 FR-03、FR-04) |
+| `docs/known-issues.md`(release-3 の追加分) | B1・B2 に追記し、B5・A1 を起票 | release-3 の実装で分かったこと(Ghostty の対応状況、e2e-verification.md のログキーのずれ)を記録するため |
 | `docs/whisper-streaming-investigation.md` | initial_prompt の行に語彙を足すようになったことを追記し、`VoiceInk.swift` の行番号のずれと `deploy-mbp.sh` の変更を記録 | 調査メモの前提が release-2 の実装で変わったため(FR-04、FR-05) |
