@@ -2,7 +2,7 @@
 
 - リリース識別子:release-3-autolearn-ghostty(Ghostty で開いた Claude Code で、直しを辞書に自動で登録できるようにする。VS Code は調べて記録するだけ)
 - ステータス: 確定
-- 作成日:2026-10-19
+- 作成日:2026-10-19(同日の run-release のあと、36・67行目を FR-02 AC-3 の優先順位に合わせて直した)
 - 参照資料:docs/releases/release-2-autolearn-japanese/handoff.md(次のリリースの候補「Ghostty・VS Code で直しを拾う」)、docs/known-issues.md(B1・B2)、docs/releases/release-2-autolearn-japanese/requirements.md(7アプリでの実測の表)、docs/ARCHITECTURE.md(規約)、CLAUDE.md、本家の Auto Learn(`VoiceInk/Features/Dictionary/AutoLearn/`)
 
 ## 背景と目的
@@ -33,7 +33,7 @@ VS Code の3か所は、どこで止まるかが実機でまだ分かってい�
 | VS Code の扱い | エディタ・Claude Code 拡張の入力欄・統合ターミナルの3か所を、調べて記録するだけにする。事実が無いまま設計すると、実機で外れて作り直しになりやすい。直すのは release-4 以降 |
 | 実機での事前確認 | 要件を書く前に MacBook Pro で確かめる案もあったが、ユーザーが外出先のため、先に要件にした。実機で確かめる AC はすべて手動検証必須にする。そのため run-release は draft PR で終わる見込み |
 | 対象のターミナル | Ghostty だけ。ターミナル.app・iTerm2 などは対象外 |
-| Enter で送る使い方 | ユーザーは直したらすぐ Enter で送る。Ghostty では、直しを確定させるまでの間、入力欄を1秒ごとに読み、直した文字が残っていた最後の状態を持っておく。確定させる時点の状態から直しが取れなければ、持っておいた状態を使う |
+| Enter で送る使い方 | ユーザーは直したらすぐ Enter で送る。Ghostty では、直しを確定させるまでの間、入力欄を1秒ごとに読み、直した文字が残っていた最後の状態を持っておく。確定させる時点では持っておいた直しを優先し、無いときだけ確定させる時点の状態から取り出す(Enter で送ったあとの状態は、送った文と応答が並んでいて取り違えやすいため) |
 | 長い履歴(10万文字超) | このリリースで直す。Ghostty では、貼り付けた位置の近く(履歴の末尾)だけを比べる。履歴の前のほうにある同じプロンプトの行も比べないので、B1 の対策にもなる |
 | Ghostty 以外のアプリ | 動作を変えない。新しい探し方と1秒ごとの読み取りは、貼り付け先が Ghostty のときだけ使う |
 | CLAUDE.md の更新 | 決定事項の「途中経過 M2〜M6 は release-3 以降に再開する」を「release-4 以降に再開する」に直し、「Ghostty で直しを拾う対応をこのフォークで行う(release-3 で決定)」を追記する |
@@ -64,7 +64,7 @@ VS Code の3か所は、どこで止まるかが実機でまだ分かってい�
 
 - 場所: `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnTerminalSnapshotTracker.swift`(新規)、`Tests/VoiceInkTests/AutoLearnTerminalSnapshotTrackerTests.swift`(新規)
 
-貼り付け先が Ghostty のとき、直しを確定させるまでの間に入力欄を1秒ごとに読み、FR-01 で直しが取れた最後の状態を持っておく。確定させる時点の状態から直しが取れなければ、持っておいた状態を使う。
+貼り付け先が Ghostty のとき、直しを確定させるまでの間に入力欄を1秒ごとに読み、FR-01 で直しが取れた最後の状態を持っておく。確定させる時点では持っておいた直しを優先し、無いときだけ確定させる時点の状態から取り出す(AC-3)。
 
 - AC-1: 読み取りの間隔は1秒。読み取りを続けるのは、本家の見張りの間(貼り付けから最大60秒、次の貼り付け・次の録音開始・フォーカスが外れたときまで)だけ。見張りが終わったら、読み取りも止まる
 - AC-2: 読むたびに FR-01 で直しを取り出し、取れたら(`nil` でなければ)それを「最後に取れた直し」として置き換える。取れなかった回は、前に持っていたものを消さない

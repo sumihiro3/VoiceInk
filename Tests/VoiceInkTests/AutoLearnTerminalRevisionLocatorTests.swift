@@ -18,12 +18,28 @@ final class AutoLearnTerminalRevisionLocatorTests: XCTestCase {
     }
 
     func testBeforeAnchorWithMultipleMatchesPicksNearest() {
-        let fixture = Fixture(style: .plain)
-        let outcome = AutoLearnTerminalRevisionLocator.locate(
-            fixture.snapshot(final: fixture.revisedFinal)
-        )
-        XCTAssertGreaterThan(outcome.beforeAnchorMatchCount, 0)
-        XCTAssertEqual(outcome.revision?.corrected, Fixture.corrected)
+        for style in styles {
+            let fixture = Fixture(style: style)
+            let baseline = fixture.baseline as NSString
+            let anchor = baseline.substring(
+                with: NSRange(location: fixture.pastedRange.location - 16, length: 16)
+            )
+            XCTAssertGreaterThanOrEqual(fixture.baseline.components(separatedBy: anchor).count - 1, 10, "\(style)")
+
+            let outcome = AutoLearnTerminalRevisionLocator.locate(
+                fixture.snapshot(final: fixture.revisedFinal)
+            )
+            XCTAssertGreaterThanOrEqual(outcome.beforeAnchorMatchCount, 10, "\(style)")
+            XCTAssertEqual(outcome.revision?.original, Fixture.original)
+            XCTAssertEqual(outcome.revision?.corrected, Fixture.corrected)
+        }
+    }
+
+    func testUpstreamEngineCannotLocateRepeatedFrames() {
+        for style in styles {
+            let fixture = Fixture(style: style)
+            XCTAssertNil(FinalSnapshotDiffEngine.revision(from: fixture.snapshot(final: fixture.revisedFinal)))
+        }
     }
 
     func testVeryLongHistoryIsHandledWithinSearchRadius() {
@@ -40,12 +56,14 @@ final class AutoLearnTerminalRevisionLocatorTests: XCTestCase {
     func testSentTextDoesNotLeakReply() {
         for style in styles {
             let fixture = Fixture(style: style)
-            let revision = AutoLearnTerminalRevisionLocator.revision(
-                from: fixture.snapshot(final: fixture.sentFinal)
-            )
-            if let revision {
-                XCTAssertFalse(revision.corrected.contains("⏺"))
-                XCTAssertFalse(revision.corrected.contains("了解しました"))
+            for final in [fixture.sentFinal, fixture.sentFramedFinal] {
+                let revision = AutoLearnTerminalRevisionLocator.revision(
+                    from: fixture.snapshot(final: final)
+                )
+                if let revision {
+                    XCTAssertFalse(revision.corrected.contains("⏺"), "\(style)")
+                    XCTAssertFalse(revision.corrected.contains("了解しました"), "\(style)")
+                }
             }
         }
     }

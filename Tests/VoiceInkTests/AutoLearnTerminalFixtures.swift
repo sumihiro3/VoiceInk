@@ -18,9 +18,11 @@ struct AutoLearnTerminalFixture {
         self.leadingFiller = leadingFiller
     }
 
+    /// Each past prompt keeps its input frame, so the anchors around the paste repeat in the history.
     var history: String {
         leadingFiller + (0..<historyCount).map { index in
-            "> 送った文\(index)です\n\n⏺ 応答\(index)です。\n\n"
+            let block = inputBlock("送った文\(index)です")
+            return block.prefix + block.text + block.suffix + "\n⏺ 応答\(index)です。\n\n"
         }.joined()
     }
 
@@ -60,11 +62,19 @@ struct AutoLearnTerminalFixture {
     var unchangedFinal: String { baseline }
     var emptyInputFinal: String { screen("").0 }
 
-    /// The text was sent with Enter: it stays as plain history, followed by a reply and a new empty frame.
+    /// The corrected text was sent with Enter: it stays as plain history, followed by a reply and a new empty frame.
     var sentFinal: String {
         let block = inputBlock("")
-        return history + "> \(Self.original)\n\n⏺ 了解しました。確認します。\n\n"
+        return history + "> \(Self.corrected)\n\n⏺ 了解しました。確認します。\n\n"
             + block.prefix + block.suffix
+    }
+
+    /// Same as `sentFinal`, but the sent text keeps its input frame where the input was.
+    var sentFramedFinal: String {
+        let sent = inputBlock(Self.corrected)
+        let empty = inputBlock("")
+        return history + sent.prefix + sent.text + sent.suffix
+            + "\n⏺ 了解しました。確認します。\n\n" + empty.prefix + empty.suffix
     }
 }
 

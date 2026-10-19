@@ -71,20 +71,6 @@ VoiceInk フォーク(Whisper 途中経過表示) の差分レビュー（敵対
 - 現象: 後方アンカー(貼り付けた文字の後ろの目印)の探索終端を、元の貼り付け範囲の末尾から 8,192 UTF-16 に固定している。一方、貼り付けは最大 12,000 文字、修正結果は元の長さの 2 倍 + 64 文字まで許容されている。長文に 8,192 文字を超える追加をする有効な修正では、後方アンカーが探索範囲の外へ移動して `afterAnchorNotFound` になり、候補が失われる。許容長の判定に到達する前の不整合である。
 - 対応方針: 後方アンカーの探索終端を、許容する最大修正長を含むように算出する。または前方アンカーから最大許容修正長まで探索する。8,192 超の挿入を含む境界テストも追加する。
 
-### A1. 実機検証が存在しないログ項目を要求している
-
-- severity: low（review:arch 由来、起票日: 2026-10-19）
-- 場所: `docs/releases/release-3-autolearn-ghostty/e2e-verification.md:21-39`
-- 現象: 検証手順は `usedTrackedRevision` を確認・記録するよう指定しているが、実装が出力するキーは `tracked` である。また非 Ghostty では terminal 診断欄自体を付けないため、AC-6 が要求する `reads=0` も出力されない。このままでは、記載された観測方法で合否を判定できない。
-- 対応方針: 検証手順を実際の `tracked` キーに合わせる。非 Ghostty については `reads` が存在しないことを期待値にするか、実装側で明示的に `reads=0` を出す。
-
-### N4. 受け入れ基準 FR-01 AC-7 を満たしていない
-
-- severity: high（check:ac-check 由来、起票日: 2026-10-19）
-- 場所: 該当なし（関連: `Tests/VoiceInkTests/AutoLearnTerminalFixtures.swift:21-25`）
-- 現象: 受け入れ基準の照合で、FR-01 AC-7 を満たしていないと判定した。テストは全件通過している(`crw-check-test.log` で 68 件 passed・0 failed、TEST SUCCEEDED。Locator・Tracker・Target・Upstream の4スイートで30件 passed)。(2) testVeryLongHistory、(3) testSentTextDoesNotLeakReply(nil または応答を含まない)、(4) testEmptyInputIsNil、(5) testUnchangedInputIsNil は要件どおりだった。一方 (1) のフィクスチャ(`AutoLearnTerminalFixtures.swift:21-25`)は、履歴に `> 送った文N` 行を12回出すだけで、Claude Code の入力欄の枠(罫線・╭╮)は履歴に一度も出てこない。要件は「入力欄の枠と `> ` の行が履歴に10回以上出てくる baseline」であり、合致しない。前の目印が final に1か所しか無いため、B1 の核心である「前の目印が複数か所ある」状況が再現されていない(テストも `beforeAnchorMatchCount > 0` しか確かめていない)。また (3) の sentFinal は、送った文として直した文ではなく original を残しており、要件の「入力欄の位置に直した文が残り」とも異なる(結果は nil で同じになる見込みだが、入力が仕様と違う)。
-- 対応方針: 未検討、要壁打ち(候補: フィクスチャの履歴に入力欄の枠と `> ` の行を10回以上出し、前の目印が複数か所ある final を作る。(3) の sentFinal は直した文を入力欄の位置に残す形に直す)
-
 ## 解決済みログ
 
 | ID | 内容 | 解決リリース |
@@ -94,5 +80,7 @@ VoiceInk フォーク(Whisper 途中経過表示) の差分レビュー（敵対
 | N2 | N1 のテスト1件の失敗で `make test` が通らなかった。N1 の修正後に `make test` が16件すべて成功 | release-2-autolearn-japanese(FR-06 AC-3) |
 | N3 | `FORK-CHANGES.md` に `CLAUDE.md` と `docs/whisper-streaming-investigation.md` の release-2 の変更行が無かった。2行を追記した | release-2-autolearn-japanese(FR-08 AC-3) |
 | B3 | 審査が時間切れ(応答に30秒前後かかる)や Gemini の 503・429 で失敗し、次の直しまでやり直されなかった。待ち時間の既定を90秒にし、失敗したら30・60・120・240秒の間隔で自動でやり直すようにした(429 は `retryDelay` 以上待つ)。実機で時間切れからの自動のやり直しと成功を確認 | release-2-autolearn-japanese(FR-03 AC-1、FR-10) |
+| A1 | 実機確認の手順書のログの欄名(`usedTrackedRevision`・`beforeAnchorMatches`・`reads=0`)が、実装が出す名前(`tracked`・`beforeAnchors`、Ghostty 以外では欄なし)と違った。手順書を実装に合わせた | release-3-autolearn-ghostty(FR-05 AC-1) |
+| N4 | FR-01 AC-7 の作り物の履歴に入力欄の枠が1か所しか無く、前の目印が複数か所ある状況をテストしていなかった。履歴の各行に枠を付けて前の目印を13か所にし、目印の数が10以上で正しく直しを取れること、本家の処理ではこの履歴で取れないことをテストした。送った文は直した文にし、枠つきで残る場合も足した | release-3-autolearn-ghostty(FR-01 AC-7) |
 
 <!-- 解決した項目はバックログから削除せずこの表へ移動し、解決リリース(対応 FR 番号つき)を記録する -->

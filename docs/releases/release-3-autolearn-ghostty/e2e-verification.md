@@ -22,12 +22,14 @@ ssh mbp "/usr/bin/log show --last 10m --info --predicate 'subsystem == \"com.pra
 
 | 欄・文言 | カテゴリ | 見ること |
 | --- | --- | --- |
-| `fieldUTF16` | AutoLearnDiagnostics(貼り付けたとき・確定させるとき) | 入力欄の文字数(UTF-16)。AC-5 では 100000 を超えるか |
+| `fieldUTF16` | AutoLearnDiagnostics(貼り付けたとき) | 入力欄の文字数(UTF-16)。AC-5 では 100000 を超えるか |
+| `finalUTF16` | AutoLearnDiagnostics(確定させるとき) | 確定させるときに読んだ入力欄の文字数(UTF-16) |
+| `revision` | AutoLearnDiagnostics(確定させるとき) | 直しが取れたか(`found` / `none`) |
 | `stage` | AutoLearnDiagnostics(確定させるとき) | 直しが取れなかったときに止まった段階 |
-| `usedTrackedRevision` | AutoLearnDiagnostics(確定させるとき) | 1秒ごとの読み取りで取れた「最後に取れた直し」を使ったか |
-| `reads` | AutoLearnDiagnostics(確定させるとき) | 1秒ごとの読み取りの回数 |
-| `maxReadMs` | AutoLearnDiagnostics(確定させるとき) | 1回の読み取りにかかった時間の最大値(ミリ秒)。時間切れ(0.1秒・0.2秒)に収まるかの目安 |
-| `beforeAnchorMatches` | AutoLearnDiagnostics(確定させるとき) | 前の目印が見つかった数 |
+| `tracked` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 1秒ごとの読み取りで取れた「最後に取れた直し」を使ったか(`yes` / `no`) |
+| `reads` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 1秒ごとの読み取りの回数 |
+| `maxReadMs` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 1回の読み取りにかかった時間の最大値(ミリ秒)。時間切れ(0.1秒・0.2秒)に収まるかの目安 |
+| `beforeAnchors` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 前の目印が見つかった数 |
 | `Queued … candidate(s)` | AutoLearn | 候補がキューに入ったこと |
 | `Auto Learn review completed` | AutoLearnAIReview | 審査が完了したこと |
 | `pasted-range-invalid` など | AutoLearnCapture | 貼り付けた直後の読み取りが捨てられた理由 |
@@ -36,7 +38,7 @@ ssh mbp "/usr/bin/log show --last 10m --info --predicate 'subsystem == \"com.pra
 
 結果は「合格」「不合格」と、不合格なら止まった `stage` を書く。
 
-| AC | 内容 | 結果 | 日付 | 備考(`fieldUTF16`・`stage`・`usedTrackedRevision`・`reads`・`maxReadMs`・`beforeAnchorMatches`) |
+| AC | 内容 | 結果 | 日付 | 備考(`fieldUTF16`・`stage`・`tracked`・`reads`・`maxReadMs`・`beforeAnchors`) |
 | --- | --- | --- | --- | --- |
 | AC-2 | Ghostty で Enter で送る | | | |
 | AC-3 | 応答の文字が候補に入らない | | | |
@@ -81,7 +83,7 @@ ssh mbp "/usr/bin/log show --last 10m --info --predicate 'subsystem == \"com.pra
 
 1. Chrome とテキストエディットで、`docs/releases/release-2-autolearn-japanese/e2e-verification.md` の AC-1 と同じ口述と直しを行う
 2. どちらも今までどおり候補になること
-3. `AutoLearnDiagnostics` の行が出ていること(Ghostty 以外でも出す仕様)。このとき `reads` が 0 であること(1秒ごとの読み取りは Ghostty だけ)
+3. `AutoLearnDiagnostics` の行が出ていること(Ghostty 以外でも出す仕様)。このとき確定させる行に `reads` などの Ghostty 用の欄が付かないこと(1秒ごとの読み取りは Ghostty だけで、ほかのアプリではこの欄自体を出さない)
 
 ### AC-7: VS Code の調査
 
@@ -125,4 +127,4 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 | --- | --- | --- | --- |
 | 読み取りが時間切れ(貼り付け時 0.1秒、以降 0.2秒)に収まるか | `maxReadMs` と、貼り付けたときの行の読み取りの結果。5.6万文字では収まっていた。10万文字超での値を記録する | | |
 | 長い文を折り返したとき、読み取った文字に改行が入るか | 1行に収まらない長さの口述をし、貼り付けたときの行が `pasted-range-invalid` になるか確かめる。起きたら既知課題に起票する(このリリースでは直さない) | | |
-| Enter の直前1秒未満の直しを拾えないことが、困るほど起きるか | AC-2 で、直した直後に Enter を押して確かめる。`usedTrackedRevision` と `stage` を見る | | |
+| Enter の直前1秒未満の直しを拾えないことが、困るほど起きるか | AC-2 で、直した直後に Enter を押して確かめる。`tracked` と `stage` を見る | | |
