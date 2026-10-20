@@ -55,6 +55,12 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
         let failedReadCount: Int
         let skippedReadCount: Int
         let maximumReadMilliseconds: Int
+        /// 読み取りで取れた直しが前回と変わった回数。
+        var revisionUpdates = 0
+        /// 最後に直しが変わってから確定までのミリ秒。直しが一度も取れていなければ nil。
+        var lastRevisionAgeMilliseconds: Int?
+        /// 追跡済みの直しを使ったかどうかに関係なく、final を調べた結果(ログ用)。
+        var finalProbe: AutoLearnTerminalRevisionLocator.Outcome?
     }
 
     private let baselineFieldText: String
@@ -73,6 +79,8 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
     private(set) var failedReadCount = 0
     private(set) var skippedReadCount = 0
     private(set) var maximumReadMilliseconds = 0
+    private(set) var revisionUpdates = 0
+    private var lastRevisionChangedAt: UInt64?
 
     init(
         baselineFieldText: String,
@@ -129,6 +137,10 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
         }
         readCount += 1
         if let revision = locate(finalFieldText: text).revision {
+            if revision.original != lastRevision?.original || revision.corrected != lastRevision?.corrected {
+                revisionUpdates += 1
+                lastRevisionChangedAt = finishedAt
+            }
             lastRevision = revision
         }
     }
@@ -139,12 +151,16 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
         var revision = lastRevision
         var usedTracked = false
         var finalOutcome: AutoLearnTerminalRevisionLocator.Outcome?
+        let finalProbe = finalFieldText.map { locate(finalFieldText: $0) }
         if revision != nil {
             usedTracked = true
-        } else if let finalFieldText {
-            let outcome = locate(finalFieldText: finalFieldText)
-            finalOutcome = outcome
-            revision = outcome.revision
+        } else if let finalProbe {
+            finalOutcome = finalProbe
+            revision = finalProbe.revision
+        }
+        let resolvedAt = now()
+        let ageMilliseconds = lastRevisionChangedAt.map {
+            resolvedAt >= $0 ? Int((resolvedAt - $0) / 1_000_000) : 0
         }
         return Resolution(
             revision: revision,
@@ -153,7 +169,10 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
             readCount: readCount,
             failedReadCount: failedReadCount,
             skippedReadCount: skippedReadCount,
-            maximumReadMilliseconds: maximumReadMilliseconds
+            maximumReadMilliseconds: maximumReadMilliseconds,
+            revisionUpdates: revisionUpdates,
+            lastRevisionAgeMilliseconds: ageMilliseconds,
+            finalProbe: finalProbe
         )
     }
 

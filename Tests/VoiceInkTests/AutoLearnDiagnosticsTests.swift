@@ -82,6 +82,34 @@ final class AutoLearnDiagnosticsTests: XCTestCase {
         XCTAssertTrue(line.contains("skippedReads=4"))
         XCTAssertTrue(line.contains("tracked=yes"))
         XCTAssertTrue(line.contains("maxReadMs=87"))
+        XCTAssertTrue(line.contains("updates=0"))
+        XCTAssertTrue(line.contains("lastUpdateAgeMs=none"))
+        XCTAssertTrue(line.contains("correctedUTF16=none"))
+        XCTAssertTrue(line.contains("finalStage=none"))
+    }
+
+    func testFinalizeLineWithRevisionLengths() {
+        var fields = AutoLearnDiagnostics.TerminalFields(
+            beforeAnchorMatches: 13, afterAnchorMatches: 1, reads: 9, failedReads: 0,
+            skippedReads: 0, usedTrackedRevision: true, maxReadMs: 9
+        )
+        fields.revisionUpdates = 3
+        fields.lastUpdateAgeMs = 1200
+        fields.originalUTF16 = 28
+        fields.correctedUTF16 = 27
+        fields.finalStage = "input-empty 口述"
+        fields.finalCorrectedUTF16 = nil
+        let line = AutoLearnDiagnostics.finalizeLine(
+            bundleIdentifier: "com.mitchellh.ghostty", reason: .focus, finalFieldText: history,
+            revisionFound: true, stage: .revised, terminal: fields
+        )
+        for word in forbidden { XCTAssertFalse(line.contains(word)) }
+        XCTAssertTrue(line.contains("updates=3"))
+        XCTAssertTrue(line.contains("lastUpdateAgeMs=1200"))
+        XCTAssertTrue(line.contains("originalUTF16=28"))
+        XCTAssertTrue(line.contains("correctedUTF16=27"))
+        XCTAssertTrue(line.contains("finalStage=unknown"))
+        XCTAssertTrue(line.contains("finalCorrectedUTF16=none"))
     }
 
     func testReasonRawValues() {

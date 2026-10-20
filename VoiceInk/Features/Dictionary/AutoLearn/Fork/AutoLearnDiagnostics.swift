@@ -36,6 +36,12 @@ struct AutoLearnTerminalDiagnosticFields: Equatable, Sendable {
     var skippedReads: Int
     var usedTrackedRevision: Bool
     var maxReadMs: Int
+    var revisionUpdates = 0
+    var lastUpdateAgeMs: Int?
+    var originalUTF16: Int?
+    var correctedUTF16: Int?
+    var finalStage: String?
+    var finalCorrectedUTF16: Int?
 }
 
 /// 口述の中身を含まない調査用ログ。長さ・位置・理由・アプリの識別子だけを出す。
@@ -96,6 +102,12 @@ enum AutoLearnDiagnostics {
                 "skippedReads=\(terminal.skippedReads)",
                 "tracked=\(terminal.usedTrackedRevision ? "yes" : "no")",
                 "maxReadMs=\(terminal.maxReadMs)",
+                "updates=\(terminal.revisionUpdates)",
+                "lastUpdateAgeMs=\(terminal.lastUpdateAgeMs.map(String.init) ?? "none")",
+                "originalUTF16=\(terminal.originalUTF16.map(String.init) ?? "none")",
+                "correctedUTF16=\(terminal.correctedUTF16.map(String.init) ?? "none")",
+                "finalStage=\(terminal.finalStage.map(sanitizedToken) ?? "none")",
+                "finalCorrectedUTF16=\(terminal.finalCorrectedUTF16.map(String.init) ?? "none")",
             ]
         }
         return parts.joined(separator: " ")

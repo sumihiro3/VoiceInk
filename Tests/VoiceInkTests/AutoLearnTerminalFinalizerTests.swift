@@ -55,14 +55,14 @@ final class AutoLearnTerminalFinalizerTests: XCTestCase {
         )
         XCTAssertEqual(decision.revision?.corrected, "こんにちわ世界")
         XCTAssertEqual(decision.stage, .revised)
-        XCTAssertEqual(
-            decision.terminal,
-            AutoLearnTerminalDiagnosticFields(
-                beforeAnchorMatches: 0, afterAnchorMatches: 0,
-                reads: 5, failedReads: 1, skippedReads: 2,
-                usedTrackedRevision: true, maxReadMs: 42
-            )
+        var expected = AutoLearnTerminalDiagnosticFields(
+            beforeAnchorMatches: 0, afterAnchorMatches: 0,
+            reads: 5, failedReads: 1, skippedReads: 2,
+            usedTrackedRevision: true, maxReadMs: 42
         )
+        expected.originalUTF16 = (revision.original as NSString).length
+        expected.correctedUTF16 = (revision.corrected as NSString).length
+        XCTAssertEqual(decision.terminal, expected)
     }
 
     func testGhosttyFinalOutcomeStageAndAnchorCountsAreReported() {

@@ -31,6 +31,9 @@ ssh mbp "/usr/bin/log show --last 10m --info --predicate 'subsystem == \"com.pra
 | `reads` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 1秒ごとの読み取りの回数 |
 | `maxReadMs` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 1回の読み取りにかかった時間の最大値(ミリ秒)。時間切れ(0.1秒・0.2秒)に収まるかの目安 |
 | `beforeAnchors` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 前の目印が見つかった数 |
+| `updates`・`lastUpdateAgeMs` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 1秒ごとの読み取りで直しが変わった回数と、最後に変わってから確定までのミリ秒 |
+| `originalUTF16`・`correctedUTF16` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 使った直しの、元の文と直した文の長さ。直し終わる前の状態を拾っていないかを見る |
+| `finalStage`・`finalCorrectedUTF16` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 確定時の状態から直しを取り出したときの段階と、直した文の長さ(持っておいた直しを使ったときも調べる) |
 | `Queued … candidate(s)` | AutoLearn | 候補がキューに入ったこと |
 | `Auto Learn review completed` | AutoLearnAIReview | 審査が完了したこと |
 | `pasted-range-invalid` など | AutoLearnCapture | 貼り付けた直後の読み取りが捨てられた理由 |
@@ -129,6 +132,18 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 - AC-2(Ghostty で Enter で送る): 不合格。貼り付けたときの行が `app=com.mitchellh.ghostty result=pasted-range-invalid source=native-value fieldUTF16=1134 pastedLocation=none pastedLength=29 selection=yes` で、見張りが始まらなかった(確定させる行も出ない)
 - 原因: VoiceInk は貼り付ける文字の末尾に空白を足す(設定 `AppendTrailingSpace`、既定でオン。MacBook Pro も既定のまま)。Claude Code の画面には行末の空白が残らないため、Ghostty 用の探し方(完全一致だけ)で貼り付けた文字が見つからなかった。本家の探し方には、前後の空白を除いて探す処理(`uniqueBoundaryWhitespaceMatch`)がある
 - 対応: 完全一致が無ければ、前後の空白と改行を除いた文字列で探す(`AutoLearnTerminalTarget.pastedRangeNearestToEnd`)。確かめるため、貼り付けたときの行に一致した長さ `matchedLength` を足した。2回目で `pastedLength` より `matchedLength` が1短く、`result=captured` になれば、原因の見立てが正しい
+
+### 2026-10-20 2回目(ビルド bc5dd8e)
+
+- 貼り付けたとき: `result=captured source=native-value fieldUTF16=1338 pastedLocation=902 pastedLength=29 matchedLength=28 selection=yes`。末尾の空白を除いて一致した(1回目の原因の見立てどおり)
+- 確定させるとき: `reason=focus finalUTF16=1528 revision=found stage=revised reads=9 failedReads=0 skippedReads=0 tracked=yes maxReadMs=9`。1秒ごとの読み取りで取れた直しを使った。1回の読み取りは最大9ミリ秒で、時間切れ(0.1秒・0.2秒)より十分短い
+- 候補: `Queued 1 Auto Learn candidate(s)`
+- 審査: 1回目は90秒で時間切れ(`LLMKitError code=8`)。30秒後に自動でやり直し(`retry scheduled kind=timeout attempt=1 delay=30s`)、やり直しは73秒で完了したが、結果は `rejected=1`。辞書は増えなかった
+- 貼り付けた文字は Whisper の段階で「Claude Code」が正しく出ていた(release-2 の語彙の効果)
+- 気づいた点: `tracked=yes` のとき、確定させる行の `beforeAnchors`・`afterAnchors` は 0 になる(確定時の状態を調べないため)。目印の数は、持っておいた直しを取ったときの値ではない
+- 判定: AC-2 は不合格(辞書が増えていない)。直したのは「コーデックス → Codex」で、Enter で送ったあと別のアプリへ移った(ユーザーの回答)。この直しは審査の指示文が登録する例に挙げているもので、却下は不自然
+- 見立て: 1秒ごとの読み取りが、直し終わる前の状態(「Codex」を打ち終える前など)を「最後に取れた直し」として持ち、送る前の直しを優先する FR-02 AC-3 の作りにより、それが候補になった。候補の中身はログにも保存先にも残らないため未確認
+- 対応: 確かめるため、確定させる行に `updates`・`lastUpdateAgeMs`・`originalUTF16`・`correctedUTF16`・`finalStage`・`finalCorrectedUTF16` を足した(口述の中身は出さない)。直し終わっていれば `correctedUTF16=27`
 
 ## 実機で確かめる未解決事項
 

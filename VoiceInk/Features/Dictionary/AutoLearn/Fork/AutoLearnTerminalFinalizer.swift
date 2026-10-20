@@ -83,13 +83,19 @@ enum AutoLearnTerminalFinalizer {
                 revision: resolution.revision,
                 stage: stage,
                 terminal: AutoLearnTerminalDiagnosticFields(
-                    beforeAnchorMatches: resolution.finalOutcome?.beforeAnchorMatchCount ?? 0,
-                    afterAnchorMatches: resolution.finalOutcome?.afterAnchorMatchCount ?? 0,
+                    beforeAnchorMatches: (resolution.finalOutcome ?? resolution.finalProbe)?.beforeAnchorMatchCount ?? 0,
+                    afterAnchorMatches: (resolution.finalOutcome ?? resolution.finalProbe)?.afterAnchorMatchCount ?? 0,
                     reads: resolution.readCount,
                     failedReads: resolution.failedReadCount,
                     skippedReads: resolution.skippedReadCount,
                     usedTrackedRevision: resolution.usedTrackedRevision,
-                    maxReadMs: resolution.maximumReadMilliseconds
+                    maxReadMs: resolution.maximumReadMilliseconds,
+                    revisionUpdates: resolution.revisionUpdates,
+                    lastUpdateAgeMs: resolution.lastRevisionAgeMilliseconds,
+                    originalUTF16: resolution.revision.map { ($0.original as NSString).length },
+                    correctedUTF16: resolution.revision.map { ($0.corrected as NSString).length },
+                    finalStage: resolution.finalProbe.map { finalizeStage(for: $0.stage).rawValue },
+                    finalCorrectedUTF16: resolution.finalProbe?.revision.map { ($0.corrected as NSString).length }
                 )
             )
         }
