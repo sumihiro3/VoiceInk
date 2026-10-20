@@ -32,7 +32,8 @@ final class AutoLearnTerminalFinalizerTests: XCTestCase {
             readCount: 5,
             failedReadCount: 1,
             skippedReadCount: 2,
-            maximumReadMilliseconds: 42
+            maximumReadMilliseconds: 42,
+            source: usedTracked ? .tracked : (revision != nil ? .final : .none)
         )
     }
 
@@ -62,6 +63,7 @@ final class AutoLearnTerminalFinalizerTests: XCTestCase {
         )
         expected.originalUTF16 = (revision.original as NSString).length
         expected.correctedUTF16 = (revision.corrected as NSString).length
+        expected.source = "tracked"
         XCTAssertEqual(decision.terminal, expected)
     }
 

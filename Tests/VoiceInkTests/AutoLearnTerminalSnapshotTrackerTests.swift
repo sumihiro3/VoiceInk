@@ -62,10 +62,47 @@ final class AutoLearnTerminalSnapshotTrackerTests: XCTestCase {
         scheduler.fire()
 
         let resolution = tracker.resolve(finalFieldText: fixture.sentFinal)
-        XCTAssertTrue(resolution.usedTrackedRevision)
+        XCTAssertEqual(resolution.source, .sentEcho)
+        XCTAssertFalse(resolution.usedTrackedRevision)
         XCTAssertEqual(resolution.revision?.corrected, AutoLearnTerminalFixture.corrected)
-        XCTAssertNil(resolution.finalOutcome)
         XCTAssertEqual(resolution.readCount, 3)
+
+        let cleared = makeTracker(
+            reader: FakeReader([fixture.revisedFinal]), scheduler: scheduler
+        )
+        cleared.start()
+        scheduler.fire()
+        let fallback = cleared.resolve(finalFieldText: fixture.clearedFinal)
+        XCTAssertEqual(fallback.source, .tracked)
+        XCTAssertTrue(fallback.usedTrackedRevision)
+        XCTAssertNil(fallback.finalOutcome)
+        XCTAssertEqual(fallback.revision?.corrected, AutoLearnTerminalFixture.corrected)
+    }
+
+    func testFinalInputWinsOverTrackedMidEdit() {
+        let reader = FakeReader([fixture.midEditFinal])
+        let scheduler = FakeScheduler()
+        let tracker = makeTracker(reader: reader, scheduler: scheduler)
+        tracker.start()
+        scheduler.fire()
+        XCTAssertNotNil(tracker.lastRevision)
+
+        let resolution = tracker.resolve(finalFieldText: fixture.revisedFinal)
+        XCTAssertEqual(resolution.source, .final)
+        XCTAssertEqual(resolution.revision?.corrected, AutoLearnTerminalFixture.corrected)
+    }
+
+    func testSentWithoutCorrectionIgnoresTrackedRevision() {
+        let reader = FakeReader([fixture.midEditFinal])
+        let scheduler = FakeScheduler()
+        let tracker = makeTracker(reader: reader, scheduler: scheduler)
+        tracker.start()
+        scheduler.fire()
+
+        let resolution = tracker.resolve(finalFieldText: fixture.sentUncorrectedFinal)
+        XCTAssertEqual(resolution.source, .sentEcho)
+        XCTAssertEqual(resolution.sentEcho, .unchanged)
+        XCTAssertNil(resolution.revision)
     }
 
     func testCountsRevisionUpdatesAndAgeAndProbesFinal() {
@@ -85,9 +122,9 @@ final class AutoLearnTerminalSnapshotTrackerTests: XCTestCase {
         let resolution = tracker.resolve(finalFieldText: fixture.sentFinal)
         XCTAssertEqual(resolution.revisionUpdates, 2)
         XCTAssertEqual(resolution.lastRevisionAgeMilliseconds, 600)
-        XCTAssertEqual(resolution.revision?.corrected.contains("Claude Code"), false)
-        XCTAssertNotNil(resolution.finalProbe)
-        XCTAssertNil(resolution.finalOutcome)
+        XCTAssertEqual(resolution.finalProbe?.stage, .inputEmpty)
+        XCTAssertEqual(resolution.source, .sentEcho)
+        XCTAssertEqual(resolution.revision?.corrected, AutoLearnTerminalFixture.corrected)
     }
 
     func testFailedReadsDoNotEraseRevision() {
@@ -121,7 +158,7 @@ final class AutoLearnTerminalSnapshotTrackerTests: XCTestCase {
         let tracker = makeTracker(reader: FakeReader([fixture.baseline]), scheduler: scheduler)
         tracker.start()
         scheduler.fire()
-        XCTAssertNil(tracker.resolve(finalFieldText: fixture.sentFinal).revision)
+        XCTAssertNil(tracker.resolve(finalFieldText: fixture.sentUncorrectedFinal).revision)
 
         let other = makeTracker(reader: FakeReader([]), scheduler: FakeScheduler())
         let resolution = other.resolve(finalFieldText: nil)

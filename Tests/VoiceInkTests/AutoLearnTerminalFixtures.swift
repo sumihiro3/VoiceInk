@@ -69,6 +69,20 @@ struct AutoLearnTerminalFixture {
             + block.prefix + block.suffix
     }
 
+    /// The original text was sent with Enter without any correction.
+    var sentUncorrectedFinal: String {
+        let block = inputBlock("")
+        return history + "> \(Self.original)\n\n⏺ 了解しました。確認します。\n\n"
+            + block.prefix + block.suffix
+    }
+
+    /// The input was cleared (for example with Esc) without sending: no echo, only an empty frame.
+    var clearedFinal: String { emptyInputFinal }
+
+    /// A mid-edit state: the first word is half typed.
+    static let midEdit = "Claudeとコーデックスどちらがいいですか。"
+    var midEditFinal: String { screen(Self.midEdit).0 }
+
     /// Same as `sentFinal`, but the sent text keeps its input frame where the input was.
     var sentFramedFinal: String {
         let sent = inputBlock(Self.corrected)

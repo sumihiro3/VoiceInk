@@ -34,6 +34,8 @@ ssh mbp "/usr/bin/log show --last 10m --info --predicate 'subsystem == \"com.pra
 | `updates`・`lastUpdateAgeMs` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 1秒ごとの読み取りで直しが変わった回数と、最後に変わってから確定までのミリ秒 |
 | `originalUTF16`・`correctedUTF16` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 使った直しの、元の文と直した文の長さ。直し終わる前の状態を拾っていないかを見る |
 | `finalStage`・`finalCorrectedUTF16` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 確定時の状態から直しを取り出したときの段階と、直した文の長さ(持っておいた直しを使ったときも調べる) |
+| `source` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 使った直しの出どころ。`final`(確定させるときの入力欄)・`sent-echo`(Enter で送ったあとの送った文の行)・`tracked`(1秒ごとの読み取りで最後に取れた直し)・`none` |
+| `sentEcho` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 入力欄が空のときに送った文の行を調べた結果。`revised`・`unchanged`(直さずに送った)・`not-found` |
 | `Queued … candidate(s)` | AutoLearn | 候補がキューに入ったこと |
 | `Auto Learn review completed` | AutoLearnAIReview | 審査が完了したこと |
 | `pasted-range-invalid` など | AutoLearnCapture | 貼り付けた直後の読み取りが捨てられた理由 |
@@ -164,6 +166,7 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 - 審査: Gemini の 503 が3回と時間切れが1回で、4回目のやり直し(18:04)で完了。結果は `rejected=1`、辞書は増えなかった
 - 判定: AC-2 は不合格
 - 見立て: 最後の直し(「ー」を消す)から Enter までが短く、1秒ごとの読み取り(Ghostty 側の読み取り結果は500ミリ秒の使い回しがある)に間に合わなかった。2回目の却下も同じ原因と見る。読み取りの間隔を縮めても、この隙間は無くならない
+- 対応: 確定時の順を「確定させるときの入力欄 → 入力欄が空なら履歴に残った送った文の行 → 持っておいた直し」に改めた(FR-02 AC-3・AC-7)。確定させる行に `source`・`sentEcho` を足した。次の確認では `source=sent-echo sentEcho=revised` と、送った文の長さに合う `correctedUTF16` が出れば、この対応が効いている
 
 ## 実機で確かめる未解決事項
 

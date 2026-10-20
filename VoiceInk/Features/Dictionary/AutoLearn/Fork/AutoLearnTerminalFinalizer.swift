@@ -95,7 +95,9 @@ enum AutoLearnTerminalFinalizer {
                     originalUTF16: resolution.revision.map { ($0.original as NSString).length },
                     correctedUTF16: resolution.revision.map { ($0.corrected as NSString).length },
                     finalStage: resolution.finalProbe.map { finalizeStage(for: $0.stage).rawValue },
-                    finalCorrectedUTF16: resolution.finalProbe?.revision.map { ($0.corrected as NSString).length }
+                    finalCorrectedUTF16: resolution.finalProbe?.revision.map { ($0.corrected as NSString).length },
+                    source: resolution.source.rawValue,
+                    sentEcho: resolution.sentEcho.map(sentEchoLabel)
                 )
             )
         }
@@ -168,6 +170,15 @@ enum AutoLearnTerminalFinalizer {
             stoppedStage: finalFieldText == nil ? .readFailed : nil,
             terminalResolution: resolution
         )
+    }
+
+    /// 送った文の行を調べた結果を、ログ用の決まった文字列にする(中身は出さない)。
+    static func sentEchoLabel(_ result: AutoLearnTerminalSentEcho.Result) -> String {
+        switch result {
+        case .revised: return "revised"
+        case .unchanged: return "unchanged"
+        case .notFound: return "not-found"
+        }
     }
 
     /// Locator の段階を確定ログの段階に変える。`located` だけ名前が違う。

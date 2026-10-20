@@ -42,6 +42,8 @@ struct AutoLearnTerminalDiagnosticFields: Equatable, Sendable {
     var correctedUTF16: Int?
     var finalStage: String?
     var finalCorrectedUTF16: Int?
+    var source: String?
+    var sentEcho: String?
 }
 
 /// 口述の中身を含まない調査用ログ。長さ・位置・理由・アプリの識別子だけを出す。
@@ -108,6 +110,8 @@ enum AutoLearnDiagnostics {
                 "correctedUTF16=\(terminal.correctedUTF16.map(String.init) ?? "none")",
                 "finalStage=\(terminal.finalStage.map(sanitizedToken) ?? "none")",
                 "finalCorrectedUTF16=\(terminal.finalCorrectedUTF16.map(String.init) ?? "none")",
+                "source=\(terminal.source.map(sanitizedToken) ?? "none")",
+                "sentEcho=\(terminal.sentEcho.map(sanitizedToken) ?? "none")",
             ]
         }
         return parts.joined(separator: " ")
