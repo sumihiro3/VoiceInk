@@ -36,7 +36,10 @@ final class AutoLearnAXTextReader {
     private var manualAccessibilityUnsupportedUntil: [pid_t: UInt64] = [:]
     private var manualAccessibilityPreviousValue: [pid_t: Bool] = [:]
 
-    func focusedReadings(processID: pid_t) -> [AutoLearnAXTextReading] {
+    func focusedReadings(
+        processID: pid_t,
+        options: AutoLearnAXTextReadOptions = .standard
+    ) -> [AutoLearnAXTextReading] {
         let appElement = AXUIElementCreateApplication(processID)
         AXUIElementSetMessagingTimeout(
             appElement,
@@ -63,7 +66,8 @@ final class AutoLearnAXTextReader {
             let candidateReadings = makeReadings(
                 from: candidate.element,
                 appElement: appElement,
-                focusSource: candidate.source
+                focusSource: candidate.source,
+                options: options
             )
             readings.append(contentsOf: candidateReadings)
         }
@@ -83,15 +87,19 @@ final class AutoLearnAXTextReader {
         return role == kAXTextFieldRole || role == kAXTextAreaRole || role == kAXComboBoxRole
     }
 
-    func textValue(from element: AXUIElement) -> AutoLearnAXTextValue? {
+    func textValue(
+        from element: AXUIElement,
+        options: AutoLearnAXTextReadOptions = .standard
+    ) -> AutoLearnAXTextValue? {
         let attributes = attributeNames(of: element)
         let parameterizedAttributes = parameterizedAttributeNames(of: element)
 
-        if parameterizedAttributes.contains(kAXStringForRangeParameterizedAttribute as String),
+        if !options.skipsStringForRange,
+            parameterizedAttributes.contains(kAXStringForRangeParameterizedAttribute as String),
             attributes.contains(kAXNumberOfCharactersAttribute as String),
             let documentLength = copyInteger(kAXNumberOfCharactersAttribute as CFString, from: element),
             documentLength >= 0,
-            documentLength <= AutoLearnLimits.maximumFieldUTF16Length,
+            documentLength <= options.maximumFieldUTF16Length,
             let text = copyStringForRange(
                 NSRange(location: 0, length: documentLength),
                 from: element
@@ -102,9 +110,12 @@ final class AutoLearnAXTextReader {
         }
 
         guard let value = copyString(kAXValueAttribute as CFString, from: element),
-            value.utf16.count <= AutoLearnLimits.maximumFieldUTF16Length
+            value.utf16.count <= options.maximumFieldUTF16Length
         else {
-            guard let markerSnapshot = markerSnapshot(from: element) else { return nil }
+            guard let markerSnapshot = markerSnapshot(
+                from: element,
+                maximumFieldUTF16Length: options.maximumFieldUTF16Length
+            ) else { return nil }
             return AutoLearnAXTextValue(text: markerSnapshot.text, source: "text-markers")
         }
         return AutoLearnAXTextValue(text: value, source: "value")
@@ -113,11 +124,12 @@ final class AutoLearnAXTextReader {
     private func makeReadings(
         from element: AXUIElement,
         appElement: AXUIElement,
-        focusSource: String
+        focusSource: String,
+        options: AutoLearnAXTextReadOptions = .standard
     ) -> [AutoLearnAXTextReading] {
         var result: [AutoLearnAXTextReading] = []
 
-        if let textValue = textValue(from: element) {
+        if let textValue = textValue(from: element, options: options) {
             let reportedSelection = copyRange(
                 kAXSelectedTextRangeAttribute as CFString,
                 from: element
@@ -140,7 +152,8 @@ final class AutoLearnAXTextReader {
         if let markerReading = markerReading(
             from: element,
             appElement: appElement,
-            focusSource: focusSource
+            focusSource: focusSource,
+            maximumFieldUTF16Length: options.maximumFieldUTF16Length
         ) {
             let isDuplicate = result.contains {
                 $0.selection == markerReading.selection
@@ -157,9 +170,13 @@ final class AutoLearnAXTextReader {
     private func markerReading(
         from element: AXUIElement,
         appElement: AXUIElement,
-        focusSource: String
+        focusSource: String,
+        maximumFieldUTF16Length: Int
     ) -> AutoLearnAXTextReading? {
-        guard let snapshot = markerSnapshot(from: element) else { return nil }
+        guard let snapshot = markerSnapshot(
+            from: element,
+            maximumFieldUTF16Length: maximumFieldUTF16Length
+        ) else { return nil }
         return AutoLearnAXTextReading(
             appElement: appElement,
             targetElement: element,
@@ -170,7 +187,10 @@ final class AutoLearnAXTextReader {
         )
     }
 
-    private func markerSnapshot(from element: AXUIElement) -> MarkerSnapshot? {
+    private func markerSnapshot(
+        from element: AXUIElement,
+        maximumFieldUTF16Length: Int
+    ) -> MarkerSnapshot? {
         let parameterizedAttributes = parameterizedAttributeNames(of: element)
         guard parameterizedAttributes.contains(Self.startMarkerForRangeAttribute as String),
             parameterizedAttributes.contains(Self.endMarkerForRangeAttribute as String),
@@ -204,7 +224,7 @@ final class AutoLearnAXTextReader {
         } else { return nil }
 
         let fieldText = beforeText + selectedText + afterText
-        guard fieldText.utf16.count <= AutoLearnLimits.maximumFieldUTF16Length else {
+        guard fieldText.utf16.count <= maximumFieldUTF16Length else {
             return nil
         }
 

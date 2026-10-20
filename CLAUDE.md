@@ -65,7 +65,8 @@ ssh mbp "/usr/bin/log show --last 5m --info --predicate 'subsystem == \"com.prak
 - MacBook Pro の普段使いの VoiceInk は、当面フォーク版で置き換える。複雑な開発が出てきたら別アプリに分ける
 - 録音停止後は Mode で選んだ Whisper モデル(large-v3-turbo)で全音声を処理し直す(provider の `stopDisposition = .useBatchFallback`。release-1 で決定)
 - Mode のモデルは large-v3-turbo の量子化版(q5_0)でよい。2026-10-18 の比較で、量子化なしと誤りの箇所が同じだった(release-1 で決定)
-- 辞書の自動登録(Auto Learn)の日本語対応もこのフォークで行う。途中経過 M2〜M6 は release-3 以降に再開する(release-2 で決定)
+- 辞書の自動登録(Auto Learn)の日本語対応もこのフォークで行う。途中経過 M2〜M6 は release-4 以降に再開する(release-2 で決定、release-3 で後ろへ送った)
+- Ghostty で直しを拾う対応(貼り付け位置の決め方と、Enter で送る前の直しの保持)もこのフォークで行う(release-3 で決定)
 
 ## 未決事項(M0 の調査結果を見て決める)
 

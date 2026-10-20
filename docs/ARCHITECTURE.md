@@ -81,7 +81,7 @@ Auto Learn(貼り付けた文字を人が直したら辞書に登録する本家
 
 ### 5-1. 処理は `Fork/` の新しいファイルに置き、本家のファイルは呼び出しの差し替えだけにする
 
-- 規約: 日本語の区切り、審査の指示文、審査の待ち時間、Whisper の初期プロンプトへの語彙の追加は、`Fork/` フォルダの新しいファイルに書く(`VoiceInk/Features/Dictionary/AutoLearn/Fork/`、`VoiceInk/Infrastructure/Providers/Transcription/Whisper/Fork/`)。本家のファイルは、呼び出し先を差し替える行と、その差し替えに必要な数行だけ変える。本家の定数・private の宣言・既存の指示文(`reviewPrompt`)は消さず、`private` も外さない。差し替えたら `FORK-CHANGES.md` に記録する(1-5)。
+- 規約: 日本語の区切り、審査の指示文、審査の待ち時間、Whisper の初期プロンプトへの語彙の追加、Ghostty 向けの直しの取り出し(`AutoLearnTerminal*.swift`)と確定時の診断ログ(`AutoLearnDiagnostics.swift`)は、`Fork/` フォルダの新しいファイルに書く(`VoiceInk/Features/Dictionary/AutoLearn/Fork/`、`VoiceInk/Infrastructure/Providers/Transcription/Whisper/Fork/`)。本家のファイルは、呼び出し先を差し替える行と、その差し替えに必要な数行だけ変える。本家の定数・private の宣言・既存の指示文(`reviewPrompt`)は消さず、`private` も外さない。差し替えたら `FORK-CHANGES.md` に記録する(1-5)。
 - 根拠: 本家が未マージのブランチ `codex/optional-ai-dictionary-review` で Auto Learn を作り替え中のため、本家のファイルを大きく変えると取り込み(`git rebase main`)のたびに衝突する。要件 FR-07(差し替えは呼び出しだけ)。差し替えた箇所は次のとおり。
   - `Features/Dictionary/AutoLearn/CorrectionDiffEngine.swift:34-36` 付近(直す前と直したあとの文を区切る呼び出し。日本語を含むときだけ `AutoLearnJapaneseSegmenter` を使う)
   - `Features/Dictionary/AutoLearn/AutoLearnAIReviewer.swift:126`(`systemPrompt` を `AutoLearnForkReviewPrompt.text` に)
@@ -89,16 +89,24 @@ Auto Learn(貼り付けた文字を人が直したら辞書に登録する本家
   - `Features/Modes/State/ModeRuntimeConfiguration.swift:19`(`WhisperPrompt.resolvedPrompt` を `WhisperVocabularyPrompt.resolvedPrompt` に)
   - `App/VoiceInk.swift:96`(`WhisperVocabularySource.register(container:)` を1行足す)
   - `Features/Dictionary/AutoLearn/AutoLearnService.swift` の審査の成功時・失敗時(`AutoLearnReviewRetryScheduler` を呼ぶ2行)と、`retryPendingReviewIfIdle()`(審査が進行中でなければ始める関数を1つ足す)。審査の失敗から間を空けてやり直すため(FR-10)
+  - `Features/Dictionary/AutoLearn/AutoLearnAXTextReader.swift` の `textValue`・`markerSnapshot`(10万文字の上限判定の3か所を `AutoLearnAXTextReadOptions` の上限に。Ghostty のときだけ `string-for-range` を飛ばす)。release-3 FR-04
+  - `Features/Dictionary/AutoLearn/AutoLearnAXRuntime.swift`(`Session` への bundle id と tracker、貼り付けた範囲を決める Ghostty の分岐、tracker の開始と停止、診断ログの呼び出し、`finishSnapshot` の戻り値 `AutoLearnFinishedObservation`)。release-3 FR-02〜04
+  - `Features/Dictionary/AutoLearn/AutoLearnService.swift` の確定させた理由の持ち回しと、`persistSnapshot` の `FinalSnapshotDiffEngine.revision` 呼び出しの `AutoLearnTerminalFinalizer` への差し替え。release-3 FR-01・FR-03
 
 ### 5-2. 直した文字・候補・審査の結果・語彙・初期プロンプトの文字列を `.public` でログに出さない
 
-- 規約: Auto Learn と語彙の初期プロンプトのログ(カテゴリ `AutoLearn`・`AutoLearnAIReview`・`AutoLearnCapture`・`WhisperVocabularyPrompt`)に、直した文字、候補の文字(source・destination・前後の文脈)、審査の結果の文字列、語彙の語、初期プロンプトの文字列を `privacy: .public` で出さない。`.public` にしてよいのは、件数・文字数・秒数・審査の判定の種類名(`rejected` など口述に由来しないもの)だけ。語彙の反映は `vocabularyTerms=<件数> promptChars=<文字数>` の数値だけで確かめる。
+- 規約: Auto Learn と語彙の初期プロンプトのログ(カテゴリ `AutoLearn`・`AutoLearnAIReview`・`AutoLearnCapture`・`WhisperVocabularyPrompt`・`AutoLearnDiagnostics`)に、直した文字、候補の文字(source・destination・前後の文脈)、審査の結果の文字列、語彙の語、初期プロンプトの文字列を `privacy: .public` で出さない。`.public` にしてよいのは、件数・文字数・秒数・審査の判定の種類名(`rejected` など口述に由来しないもの)だけ。`AutoLearnDiagnostics`(release-3)で `.public` にしてよいのは、貼り付け先アプリの識別子(bundle id)、理由や段階の決まった文字列(確定させた理由、止まった段階)、文字数・回数・ms だけ。語彙の反映は `vocabularyTerms=<件数> promptChars=<文字数>` の数値だけで確かめる。
 - 根拠: 2-3(口述内容を `.public` で出さない)。直した文字は口述の中身そのもので、`logs/` と同じ扱いになる(CLAUDE.md「作業の進め方」)。`Features/Dictionary/AutoLearn/AutoLearnService.swift:8` が `category: "AutoLearn"`、`AutoLearnAIReviewer.swift:73` が `AutoLearnAIReview`、`AutoLearnAXRuntime.swift:18` が `AutoLearnCapture` のロガー。実機検証では件数の行(`Queued … candidate(s)`、`Auto Learn review completed`)だけを見る。
 
 ### 5-3. 32文字の上限と前後3単位の文脈をゆるめない
 
 - 規約: 空白なしで日本語を含む候補の長さの上限 `AutoLearnLimits.maximumUnspacedCandidateCharacters`(32文字)と、候補に付ける前後3単位の文脈を、日本語対応のためにゆるめない。長い文は、「、」「。」を区切りの単位にして文脈をそこで止める方法で扱い、上限の数字を増やさない。
 - 根拠: 口述の中身を AI に長く送らないため(要件の非機能要件・プライバシー)。上限は `Features/Dictionary/AutoLearn/AutoLearnTypes.swift:186` で定義され、`CorrectionDiffEngine.swift:363-364` の判定(直した箇所の source と destination にかかる)が使う。この数字を変える変更は、プライバシー上の判断を伴うので、要件の更新から始める。
+
+### 5-4. Ghostty では `string-for-range` を使わない
+
+- 規約: Ghostty(`com.mitchellh.ghostty`)の入力欄の読み取りは、`AXNumberOfCharacters` と `AXStringForRange` の経路を飛ばし、`AXValue` で全文を読む。上限は本家の10万文字ではなく `AutoLearnTerminalLimits.maximumFieldUTF16Length`(1,500,000)を使う。本家の定数は変えない。
+- 根拠: Ghostty の `accessibilityNumberOfCharacters` は Swift の Character 数(書記素数)を返し、`accessibilityString(for:)` は範囲を UTF-16 として解釈する。絵文字や異体字セレクタが履歴にあると、`NSRange(0, AXNumberOfCharacters)` は末尾を黙って欠く。入力欄は末尾にあるため、直しを拾えなくなる。また Ghostty は呼び出しのたびに全文を作るので、末尾だけ読んでも節約にならない。Ghostty の選択範囲はカーソルの位置ではないため、貼り付けた範囲の推定にも使わず、末尾にいちばん近い完全一致を使う。
 
 ## 4. 関連文書(AC-4)
 

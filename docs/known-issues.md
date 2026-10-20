@@ -43,6 +43,7 @@ VoiceInk フォーク(Whisper 途中経過表示) の差分レビュー（敵対
 - 場所: `VoiceInk/Features/Dictionary/AutoLearn/FinalSnapshotDiffEngine.swift` の `correctedPastedText`
 - 現象: Ghostty では、入力欄を読み取ると画面の履歴全体(約5.6万文字)が返る。貼り付けた文字の前後16文字を目印にして直した位置を探すが、履歴の中に同じ並びが複数あり、目印が一意に決まらない。そのため直した文字が取れず、候補が作られない。
 - 対応方針: 要壁打ち(履歴の末尾だけを対象にする、目印を長くする、Ghostty は対象外にする、のどれかを実測して決める)
+- release-3 での対応: Ghostty の判定(bundle identifier)、貼り付けた位置の近くだけを比べる Locator、1秒ごとに直しを拾う Tracker を `Fork/` に追加した。**実機確認待ち**(`docs/releases/release-3-autolearn-ghostty/e2e-verification.md` の AC-2〜AC-5 を参照)。確認が済むまで解決済みログへは移さない
 
 ### B2. VS Code のエディタで読み取れない
 
@@ -50,6 +51,7 @@ VoiceInk フォーク(Whisper 途中経過表示) の差分レビュー（敵対
 - 場所: `VoiceInk/Features/Dictionary/AutoLearn/AutoLearnAXRuntime.swift`(アクセシビリティ経由の読み取り)
 - 現象: VS Code のエディタでは、入力欄の中身が0文字で返る。直した文字を取れないため、候補が作られない。
 - 対応方針: VS Code の設定 `editor.accessibilitySupport` を `on` にすると読める可能性があるが、未確認。確かめて、読めるなら手順を e2e-verification.md に足し、読めないなら対象外として記録する。
+- release-3 での調査(仮): VS Code のエディタ・Claude Code 拡張の入力欄・統合ターミナルの3か所と `editor.accessibilitySupport`(`auto`・`on`)の6通りを、`docs/releases/release-3-autolearn-ghostty/e2e-verification.md` の AC-7 で調べる。調査用に `AutoLearnDiagnostics` のログ(読み取りの結果・方法・文字数・止まった段階)を出す。実測が出てから、この項目を書き直し、必要なら新しい項目を起票する
 
 ### B4. 登録した語が、次の口述で正しく出ないことがある(似た音の別の誤り方に単語置換が当たらない)
 
@@ -62,6 +64,13 @@ VoiceInk フォーク(Whisper 途中経過表示) の差分レビュー（敵対
   - 1つの文で2か所を直せば候補は2件になる(コードで確認)。実機で1か所しか登録されなかったのは、1か所しか直されなかったため(貼り付け前の AI 整形がもう1か所を直していた可能性があるが、貼った文字はログに無いので未確認)
 - 対応方針: release-3 の候補「案 B: 似た音のカタカナにも単語置換を当てる」。カタカナの元の表記と、1〜2文字だけ違う語にも置換を当てる。誤って当たる危険があるので、元の表記の長さ・違う文字数・カタカナだけに限るなどの条件を、release-2 の録音で実測して決める。それまでの間は、別の誤り方を直すたびに Auto Learn が同じ行き先の置換に元の表記を足すので、難しい語は2〜3回直すと出るようになる見込み(未確認)。あわせて「案 C: 審査のときに、ありそうな誤り方も元の表記として返させる」も比べる候補
 
+### B5. 8,192 UTF-16 を超える長さ増加で後方アンカーを探索できない
+
+- severity: low（review:bugs 由来、起票日: 2026-10-19）
+- 場所: `VoiceInk/Features/Dictionary/AutoLearn/Fork/AutoLearnTerminalRevisionLocator.swift:57-79`
+- 現象: 後方アンカー(貼り付けた文字の後ろの目印)の探索終端を、元の貼り付け範囲の末尾から 8,192 UTF-16 に固定している。一方、貼り付けは最大 12,000 文字、修正結果は元の長さの 2 倍 + 64 文字まで許容されている。長文に 8,192 文字を超える追加をする有効な修正では、後方アンカーが探索範囲の外へ移動して `afterAnchorNotFound` になり、候補が失われる。許容長の判定に到達する前の不整合である。
+- 対応方針: 後方アンカーの探索終端を、許容する最大修正長を含むように算出する。または前方アンカーから最大許容修正長まで探索する。8,192 超の挿入を含む境界テストも追加する。
+
 ## 解決済みログ
 
 | ID | 内容 | 解決リリース |
@@ -71,5 +80,7 @@ VoiceInk フォーク(Whisper 途中経過表示) の差分レビュー（敵対
 | N2 | N1 のテスト1件の失敗で `make test` が通らなかった。N1 の修正後に `make test` が16件すべて成功 | release-2-autolearn-japanese(FR-06 AC-3) |
 | N3 | `FORK-CHANGES.md` に `CLAUDE.md` と `docs/whisper-streaming-investigation.md` の release-2 の変更行が無かった。2行を追記した | release-2-autolearn-japanese(FR-08 AC-3) |
 | B3 | 審査が時間切れ(応答に30秒前後かかる)や Gemini の 503・429 で失敗し、次の直しまでやり直されなかった。待ち時間の既定を90秒にし、失敗したら30・60・120・240秒の間隔で自動でやり直すようにした(429 は `retryDelay` 以上待つ)。実機で時間切れからの自動のやり直しと成功を確認 | release-2-autolearn-japanese(FR-03 AC-1、FR-10) |
+| A1 | 実機確認の手順書のログの欄名(`usedTrackedRevision`・`beforeAnchorMatches`・`reads=0`)が、実装が出す名前(`tracked`・`beforeAnchors`、Ghostty 以外では欄なし)と違った。手順書を実装に合わせた | release-3-autolearn-ghostty(FR-05 AC-1) |
+| N4 | FR-01 AC-7 の作り物の履歴に入力欄の枠が1か所しか無く、前の目印が複数か所ある状況をテストしていなかった。履歴の各行に枠を付けて前の目印を13か所にし、目印の数が10以上で正しく直しを取れること、本家の処理ではこの履歴で取れないことをテストした。送った文は直した文にし、枠つきで残る場合も足した | release-3-autolearn-ghostty(FR-01 AC-7) |
 
 <!-- 解決した項目はバックログから削除せずこの表へ移動し、解決リリース(対応 FR 番号つき)を記録する -->
