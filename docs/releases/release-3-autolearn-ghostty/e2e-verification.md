@@ -22,6 +22,7 @@ ssh mbp "/usr/bin/log show --last 10m --info --predicate 'subsystem == \"com.pra
 
 | 欄・文言 | カテゴリ | 見ること |
 | --- | --- | --- |
+| `pastedLength`・`matchedLength` | AutoLearnDiagnostics(貼り付けたとき) | 貼り付けた文字の長さと、入力欄で一致した長さ(UTF-16)。Ghostty で末尾の空白を除いて一致したときは `matchedLength` が短くなる |
 | `fieldUTF16` | AutoLearnDiagnostics(貼り付けたとき) | 入力欄の文字数(UTF-16)。AC-5 では 100000 を超えるか |
 | `finalUTF16` | AutoLearnDiagnostics(確定させるとき) | 確定させるときに読んだ入力欄の文字数(UTF-16) |
 | `revision` | AutoLearnDiagnostics(確定させるとき) | 直しが取れたか(`found` / `none`) |
@@ -120,6 +121,14 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 ```
 
 どちらも出力が空であれば合格。
+
+## 実施記録
+
+### 2026-10-20 1回目(ビルド e7d90a7)
+
+- AC-2(Ghostty で Enter で送る): 不合格。貼り付けたときの行が `app=com.mitchellh.ghostty result=pasted-range-invalid source=native-value fieldUTF16=1134 pastedLocation=none pastedLength=29 selection=yes` で、見張りが始まらなかった(確定させる行も出ない)
+- 原因: VoiceInk は貼り付ける文字の末尾に空白を足す(設定 `AppendTrailingSpace`、既定でオン。MacBook Pro も既定のまま)。Claude Code の画面には行末の空白が残らないため、Ghostty 用の探し方(完全一致だけ)で貼り付けた文字が見つからなかった。本家の探し方には、前後の空白を除いて探す処理(`uniqueBoundaryWhitespaceMatch`)がある
+- 対応: 完全一致が無ければ、前後の空白と改行を除いた文字列で探す(`AutoLearnTerminalTarget.pastedRangeNearestToEnd`)。確かめるため、貼り付けたときの行に一致した長さ `matchedLength` を足した。2回目で `pastedLength` より `matchedLength` が1短く、`result=captured` になれば、原因の見立てが正しい
 
 ## 実機で確かめる未解決事項
 

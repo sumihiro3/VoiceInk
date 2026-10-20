@@ -22,6 +22,7 @@ final class AutoLearnDiagnosticsTests: XCTestCase {
         XCTAssertTrue(line.contains("fieldUTF16=\((history as NSString).length)"))
         XCTAssertTrue(line.contains("pastedLocation=120"))
         XCTAssertTrue(line.contains("pastedLength=6"))
+        XCTAssertTrue(line.contains("matchedLength=5"))
         XCTAssertTrue(line.contains("selection=no"))
     }
 
@@ -39,6 +40,7 @@ final class AutoLearnDiagnosticsTests: XCTestCase {
         XCTAssertTrue(line.contains("result=unknown"))
         XCTAssertTrue(line.contains("source=none"))
         XCTAssertTrue(line.contains("fieldUTF16=none"))
+        XCTAssertTrue(line.contains("matchedLength=none"))
         XCTAssertTrue(line.contains("selection=none"))
     }
 

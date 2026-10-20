@@ -33,6 +33,23 @@ final class AutoLearnTerminalTargetTests: XCTestCase {
         XCTAssertGreaterThan(range?.location ?? 0, history.count - 5)
     }
 
+    func testTrailingSpaceDroppedByScreenStillMatches() {
+        let screen = "> 前の文\n> ロードコードとコーデックスどちらがいいですか。\n────\n"
+        let range = AutoLearnTerminalTarget.pastedRangeNearestToEnd(
+            of: "ロードコードとコーデックスどちらがいいですか。 ", in: screen
+        )
+        XCTAssertEqual(range, (screen as NSString).range(of: "ロードコードとコーデックスどちらがいいですか。"))
+    }
+
+    func testExactMatchIsPreferredOverTrimmed() {
+        let range = AutoLearnTerminalTarget.pastedRangeNearestToEnd(of: "abc ", in: "abc x abc")
+        XCTAssertEqual(range, NSRange(location: 0, length: 4))
+    }
+
+    func testWhitespaceOnlyPasteDoesNotMatch() {
+        XCTAssertNil(AutoLearnTerminalTarget.pastedRangeNearestToEnd(of: " \n", in: "abc"))
+    }
+
     func testIsGhostty() {
         XCTAssertTrue(AutoLearnTerminalTarget.isGhostty(bundleIdentifier: "com.mitchellh.ghostty"))
         XCTAssertFalse(AutoLearnTerminalTarget.isGhostty(bundleIdentifier: "com.apple.Terminal"))

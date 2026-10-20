@@ -56,6 +56,7 @@ enum AutoLearnDiagnostics {
     ) -> String {
         let fieldLength = fieldText.map { String(($0 as NSString).length) } ?? "none"
         let location = pastedRange.map { String($0.location) } ?? "none"
+        let matchedLength = pastedRange.map { String($0.length) } ?? "none"
         let selection = selectionAvailable.map { $0 ? "yes" : "no" } ?? "none"
         return [
             "app=\(sanitizedIdentifier(bundleIdentifier))",
@@ -64,6 +65,7 @@ enum AutoLearnDiagnostics {
             "fieldUTF16=\(fieldLength)",
             "pastedLocation=\(location)",
             "pastedLength=\((pastedText as NSString).length)",
+            "matchedLength=\(matchedLength)",
             "selection=\(selection)",
         ].joined(separator: " ")
     }

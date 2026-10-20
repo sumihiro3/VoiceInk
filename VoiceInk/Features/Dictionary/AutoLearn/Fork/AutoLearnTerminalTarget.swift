@@ -18,14 +18,23 @@ enum AutoLearnTerminalTarget {
     /// 貼り付けた文字列が入力欄の末尾にいちばん近い位置を、UTF-16 の範囲で返す。
     ///
     /// 選択範囲は使わない。Ghostty の選択範囲は端末で選択している範囲で、カーソルの位置ではないため。
-    /// 重なる一致も数える。一致が無ければ nil。
+    /// 重なる一致も数える。完全一致が無ければ、前後の空白と改行を除いた文字列で探す
+    /// (VoiceInk は末尾に空白を足して貼り付けるが、Claude Code の画面には行末の空白が残らないため)。
+    /// どちらも無ければ nil。
     static func pastedRangeNearestToEnd(of pastedText: String, in fieldText: String) -> NSRange? {
-        let pasted = pastedText as NSString
-        guard pasted.length > 0 else { return nil }
+        if let exact = lastRange(of: pastedText, in: fieldText) { return exact }
+        let core = pastedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard core != pastedText else { return nil }
+        return lastRange(of: core, in: fieldText)
+    }
+
+    private static func lastRange(of value: String, in fieldText: String) -> NSRange? {
+        let target = value as NSString
+        guard target.length > 0 else { return nil }
         let field = fieldText as NSString
-        guard field.length >= pasted.length else { return nil }
+        guard field.length >= target.length else { return nil }
         let found = field.range(
-            of: pastedText,
+            of: value,
             options: [.literal, .backwards],
             range: NSRange(location: 0, length: field.length)
         )
