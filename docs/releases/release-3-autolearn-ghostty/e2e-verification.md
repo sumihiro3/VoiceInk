@@ -154,6 +154,17 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 - 対応: 完全一致と空白を除いた一致のうち、末尾に近いほうを選ぶ(同じ位置なら完全一致)
 - 次の確認: Whisper が誤る語を含む文で行う(「Codex」は語彙の効果で正しく出るようになった)
 
+### 2026-10-20 4回目(ビルド 4247608)
+
+- 口述: 「Protopediaビデオメーカーを作りました。」(Whisper の結果、24文字+末尾の空白)。「Protopedia」を「ProtoPedia」、「ビデオメーカー」を「Video Maker」に直して、すぐ Enter で送った
+- 貼り付けたとき: `result=captured fieldUTF16=1740 pastedLocation=1308 pastedLength=25 matchedLength=24`。入力欄の位置で、末尾の空白を除いて一致した(3回目の不具合は直った)
+- 確定させるとき: `reason=focus revision=found stage=revised reads=16 tracked=yes maxReadMs=5 updates=8 lastUpdateAgeMs=2056 originalUTF16=24 correctedUTF16=30 finalStage=input-empty`。Enter で送ったあとの状態からは直しが取れず(`input-empty`)、送る前に持っておいた直しを使った
+- 候補(待ち行列の中身): 元「Protopediaビデオメーカーを作りました」→ 直した後「ProtoPedia Video Makerーを作りました」。「Maker」の後ろに「ー」が残っている
+- ユーザーの確認: 送った文に「ー」は残っていない。持っておいた直しは、送る直前の状態ではなかった
+- 審査: Gemini の 503 が3回と時間切れが1回で、4回目のやり直し(18:04)で完了。結果は `rejected=1`、辞書は増えなかった
+- 判定: AC-2 は不合格
+- 見立て: 最後の直し(「ー」を消す)から Enter までが短く、1秒ごとの読み取り(Ghostty 側の読み取り結果は500ミリ秒の使い回しがある)に間に合わなかった。2回目の却下も同じ原因と見る。読み取りの間隔を縮めても、この隙間は無くならない
+
 ## 実機で確かめる未解決事項
 
 | 項目 | 確かめ方 | 結果 | 日付 |
