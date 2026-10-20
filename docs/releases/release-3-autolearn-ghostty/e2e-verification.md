@@ -145,6 +145,15 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 - 見立て: 1秒ごとの読み取りが、直し終わる前の状態(「Codex」を打ち終える前など)を「最後に取れた直し」として持ち、送る前の直しを優先する FR-02 AC-3 の作りにより、それが候補になった。候補の中身はログにも保存先にも残らないため未確認
 - 対応: 確かめるため、確定させる行に `updates`・`lastUpdateAgeMs`・`originalUTF16`・`correctedUTF16`・`finalStage`・`finalCorrectedUTF16` を足した(口述の中身は出さない)。直し終わっていれば `correctedUTF16=27`
 
+### 2026-10-20 3回目(ビルド dcd8f1a)
+
+- 貼り付けた文字は「Claude CodeとCodexどちらがいいですか。」+ 末尾の空白で、Whisper が最初から「Codex」と正しく出していた(直す語が無い)。この回は AC-2 の確認になっていない
+- 貼り付けたとき: `result=captured fieldUTF16=1540 pastedLocation=575 pastedLength=28 matchedLength=28`。入力欄ではなく、2回目に Enter で送った同じ文(履歴に末尾の空白つきで残っていた)に完全一致した
+- 確定させるとき: `stage=not-revised updates=0 tracked=no finalStage=not-revised`。履歴の行は変わらないので、直しは取れない
+- 原因: 完全一致を、空白を除いた一致より優先していた。入力欄には行末の空白が残らないため、入力欄より前にある履歴の行を選んだ
+- 対応: 完全一致と空白を除いた一致のうち、末尾に近いほうを選ぶ(同じ位置なら完全一致)
+- 次の確認: Whisper が誤る語を含む文で行う(「Codex」は語彙の効果で正しく出るようになった)
+
 ## 実機で確かめる未解決事項
 
 | 項目 | 確かめ方 | 結果 | 日付 |

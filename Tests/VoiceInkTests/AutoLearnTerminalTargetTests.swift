@@ -41,9 +41,20 @@ final class AutoLearnTerminalTargetTests: XCTestCase {
         XCTAssertEqual(range, (screen as NSString).range(of: "ロードコードとコーデックスどちらがいいですか。"))
     }
 
-    func testExactMatchIsPreferredOverTrimmed() {
-        let range = AutoLearnTerminalTarget.pastedRangeNearestToEnd(of: "abc ", in: "abc x abc")
-        XCTAssertEqual(range, NSRange(location: 0, length: 4))
+    func testLaterTrimmedMatchWinsOverEarlierExactMatchInHistory() {
+        let screen = "> 送った文。 \n\n⏺ 応答\n────\n> 送った文。\n────\n"
+        let range = AutoLearnTerminalTarget.pastedRangeNearestToEnd(of: "送った文。 ", in: screen)
+        XCTAssertEqual(range, (screen as NSString).range(of: "送った文。", options: .backwards))
+    }
+
+    func testExactMatchIsUsedAtTheSamePosition() {
+        let range = AutoLearnTerminalTarget.pastedRangeNearestToEnd(of: "abc ", in: "x abc ")
+        XCTAssertEqual(range, NSRange(location: 2, length: 4))
+    }
+
+    func testLaterExactMatchWinsOverEarlierTrimmedMatch() {
+        let range = AutoLearnTerminalTarget.pastedRangeNearestToEnd(of: "abc ", in: "abc\nx abc y")
+        XCTAssertEqual(range, NSRange(location: 6, length: 4))
     }
 
     func testWhitespaceOnlyPasteDoesNotMatch() {
