@@ -24,6 +24,14 @@ enum AutoLearnTerminalSentEcho {
         max(2, originalLength / 4)
     }
 
+    /// 送った文の行の探し方(ログ用)。
+    enum Method: String, Sendable {
+        /// 画面の最後から上へ、いちばん新しいプロンプトの行を探した。
+        case promptLine = "prompt-line"
+        /// 貼り付けたときの画面と先頭から比べ、最初に違う行を使った。
+        case commonPrefix = "common-prefix"
+    }
+
     /// 送った文の行を調べた結果と、ログ用の位置・長さ(UTF-16)。口述の中身は持たない。
     struct Probe: Equatable, Sendable {
         let result: Result
@@ -33,9 +41,15 @@ enum AutoLearnTerminalSentEcho {
         let echoLineLocation: Int?
         /// 送った文とみなした行の長さ(プロンプトの記号を外す前)。
         let echoLineUTF16: Int?
+        var method: Method?
     }
 
-    /// 貼り付けたときの画面と送ったあとの画面を先頭から比べ、最初に違う行を送った文の行とみなす。
+    /// プロンプトの行とみなす、行頭(空白と枠の記号を除いたあと)の記号。
+    static let promptMarkers: Set<Character> = [">", "❯", "›", "»"]
+    /// 画面の最後から上へプロンプトの行を探すときの、行の数の上限。
+    static let maximumPromptSearchLines = 2_000
+
+    /// 送った文の行を探し、元の文と比べる。
     static func locate(
         baselineFieldText: String,
         finalFieldText: String,
@@ -49,6 +63,14 @@ enum AutoLearnTerminalSentEcho {
     }
 
     /// `locate` と同じ判定をし、ログ用の位置と長さも返す。
+    ///
+    /// 1. 画面の文字が増えた、または貼り付けた長さより大きく減った(描き直し)ときは、画面の最後から
+    ///    上へ、空でないいちばん新しいプロンプトの行を送った文の行とみなす。Claude Code は送った文を
+    ///    `> ` で始まる行として履歴に残し、新しい入力欄は空になる。描き直されても位置に依存しない
+    ///    (実機の10回目)。見分けられなくても、それより前の行には進まない(前に送った同じ文を拾わない)。
+    /// 2. 描き直されていないのにプロンプトの行で決まらないとき(入力欄に入力例の文が出ているなど)、
+    ///    または画面の減り方が貼り付けた長さほど(入力欄を消した)のときは、貼り付けたときの画面と
+    ///    先頭から比べ、最初に違う行を使う。
     static func probe(
         baselineFieldText: String,
         finalFieldText: String,
@@ -60,24 +82,56 @@ enum AutoLearnTerminalSentEcho {
         let limit = min(baseline.count, final.count, NSMaxRange(pastedRange))
         var common = 0
         while common < limit, baseline[common] == final[common] { common += 1 }
-        guard common + AutoLearnTerminalRevisionLocator.searchRadiusUTF16 >= pastedRange.location else {
-            return Probe(result: .notFound, commonPrefixUTF16: common, echoLineLocation: nil, echoLineUTF16: nil)
-        }
 
         let finalText = finalFieldText as NSString
+        let shrink = baseline.count - final.count
+        let slack = pastedRange.length + AutoLearnTerminalRevisionLocator.correctedLengthSlackUTF16
+        let looksCleared = shrink >= 0 && shrink <= slack
+        let redrawn = shrink > slack
+        if !looksCleared, let lineRange = latestPromptLine(in: finalText) {
+            var probe = judge(
+                lineRange: lineRange, in: finalText, common: common, originalPastedText: originalPastedText
+            )
+            probe.method = .promptLine
+            // 入力欄に入力例の文が出ていると、いちばん新しいプロンプトの行がそれになる。描き直されて
+            // いなければ、先頭から比べる探し方に戻す。描き直されていれば、先頭からの比較は意味が無い。
+            if probe.result != .notFound || redrawn { return probe }
+        } else if redrawn {
+            return Probe(
+                result: .notFound, commonPrefixUTF16: common, echoLineLocation: nil, echoLineUTF16: nil,
+                method: .promptLine
+            )
+        }
+
+        guard common + AutoLearnTerminalRevisionLocator.searchRadiusUTF16 >= pastedRange.location else {
+            return Probe(
+                result: .notFound, commonPrefixUTF16: common, echoLineLocation: nil, echoLineUTF16: nil,
+                method: .commonPrefix
+            )
+        }
+
         var lineRange = finalText.lineRange(for: NSRange(location: min(common, finalText.length), length: 0))
-        var echo = strippedPrompt(finalText.substring(with: lineRange))
         // 入力欄の枠が消えた位置に空行が入ることがあるので、空行は最大2行まで読み飛ばす。
         var skippedBlankLines = 0
-        while echo.trimmingCharacters(in: .whitespaces).isEmpty, skippedBlankLines < 2,
-            NSMaxRange(lineRange) < finalText.length
+        while strippedPrompt(finalText.substring(with: lineRange)).trimmingCharacters(in: .whitespaces).isEmpty,
+            skippedBlankLines < 2, NSMaxRange(lineRange) < finalText.length
         {
             skippedBlankLines += 1
             lineRange = finalText.lineRange(for: NSRange(location: NSMaxRange(lineRange), length: 0))
-            echo = strippedPrompt(finalText.substring(with: lineRange))
         }
+        var probe = judge(
+            lineRange: lineRange, in: finalText, common: common, originalPastedText: originalPastedText
+        )
+        probe.method = .commonPrefix
+        return probe
+    }
 
-        let lineLength = (finalText.substring(with: lineRange).trimmingCharacters(in: .newlines) as NSString).length
+    /// 選んだ行を送った文とみなせるか、元の文と比べて決める。
+    private static func judge(
+        lineRange: NSRange, in finalText: NSString, common: Int, originalPastedText: String
+    ) -> Probe {
+        let line = finalText.substring(with: lineRange)
+        let lineLength = (line.trimmingCharacters(in: .newlines) as NSString).length
         func finish(_ result: Result) -> Probe {
             Probe(
                 result: result, commonPrefixUTF16: common,
@@ -86,7 +140,7 @@ enum AutoLearnTerminalSentEcho {
         }
 
         let original = AutoLearnTextNormalizer.accessibilityComparable(originalPastedText)
-        let corrected = AutoLearnTextNormalizer.accessibilityComparable(echo)
+        let corrected = AutoLearnTextNormalizer.accessibilityComparable(strippedPrompt(line))
         guard !original.isEmpty, !corrected.isEmpty else { return finish(.notFound) }
 
         let originalLength = (original as NSString).length
@@ -101,6 +155,23 @@ enum AutoLearnTerminalSentEcho {
 
         if original == corrected { return finish(.unchanged) }
         return finish(.revised(original: original, corrected: corrected))
+    }
+
+    /// 画面の最後から上へ、本文が空でないいちばん新しいプロンプトの行を探す。空の入力欄は読み飛ばす。
+    private static func latestPromptLine(in text: NSString) -> NSRange? {
+        var end = text.length
+        var visited = 0
+        while end > 0, visited < maximumPromptSearchLines {
+            let range = text.lineRange(for: NSRange(location: end - 1, length: 0))
+            visited += 1
+            let line = text.substring(with: range)
+            let head = line.drop { [" ", "\t", "\u{00A0}", "│", "|"].contains($0) }
+            if let marker = head.first, promptMarkers.contains(marker) {
+                if !strippedPrompt(line).trimmingCharacters(in: .whitespaces).isEmpty { return range }
+            }
+            end = range.location
+        }
+        return nil
     }
 
     private static func strippedPrompt(_ line: String) -> String {

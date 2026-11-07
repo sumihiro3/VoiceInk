@@ -103,6 +103,7 @@ final class AutoLearnDiagnosticsTests: XCTestCase {
         fields.commonPrefixUTF16 = 12
         fields.echoLineOffset = -2434
         fields.echoLineUTF16 = 40
+        fields.echoMethod = "prompt-line"
         let line = AutoLearnDiagnostics.finalizeLine(
             bundleIdentifier: "com.mitchellh.ghostty", reason: .focus, finalFieldText: history,
             revisionFound: true, stage: .revised, terminal: fields
@@ -118,6 +119,7 @@ final class AutoLearnDiagnosticsTests: XCTestCase {
         XCTAssertTrue(line.contains("commonPrefixUTF16=12"))
         XCTAssertTrue(line.contains("echoLineOffset=-2434"))
         XCTAssertTrue(line.contains("echoLineUTF16=40"))
+        XCTAssertTrue(line.contains("echoMethod=prompt-line"))
     }
 
     func testReasonRawValues() {

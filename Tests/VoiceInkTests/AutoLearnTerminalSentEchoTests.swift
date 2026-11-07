@@ -41,6 +41,75 @@ final class AutoLearnTerminalSentEchoTests: XCTestCase {
         }
     }
 
+    /// 実機の10回目: Enter のあと Claude Code が履歴を消して描き直し、先頭からの一致が無くなった。
+    func testEchoIsFoundAfterScreenRedraw() {
+        for style in styles {
+            let filler = String(repeating: "古い出力の行です。\n", count: 200)
+            let before = Fixture(style: style, leadingFiller: filler)
+            let redrawn = Fixture(style: style)
+            for final in [redrawn.sentFinal, redrawn.sentFramedFinal] {
+                let probe = AutoLearnTerminalSentEcho.probe(
+                    baselineFieldText: before.baseline, finalFieldText: final,
+                    pastedRange: before.pastedRange, originalPastedText: Fixture.original
+                )
+                XCTAssertEqual(
+                    probe.result,
+                    .revised(original: Fixture.original, corrected: Fixture.corrected),
+                    "\(style)"
+                )
+                XCTAssertEqual(probe.method, .promptLine, "\(style)")
+                XCTAssertEqual(probe.commonPrefixUTF16, 0, "\(style)")
+            }
+        }
+    }
+
+    /// 応答が元の文を引用しても、プロンプトの記号で始まらない行は送った文とみなさない。
+    func testQuotedReplyIsNotTakenAsEcho() {
+        let filler = String(repeating: "古い出力の行です。\n", count: 200)
+        let before = Fixture(leadingFiller: filler)
+        let redrawn = Fixture()
+        let rule = String(repeating: "─", count: 40)
+        let final = redrawn.history + "> \(Fixture.corrected)\n\n⏺ 「\(Fixture.original)」ですね。\n\n"
+            + "\(rule)\n> \n\(rule)\n"
+        XCTAssertEqual(
+            AutoLearnTerminalSentEcho.locate(
+                baselineFieldText: before.baseline, finalFieldText: final,
+                pastedRange: before.pastedRange, originalPastedText: Fixture.original
+            ),
+            .revised(original: Fixture.original, corrected: Fixture.corrected)
+        )
+    }
+
+    /// いちばん新しい送った行が見分けられなければ、それより前の同じ文の行には進まない。
+    func testOlderIdenticalLineIsNotUsedWhenLatestIsUnrecognized() {
+        let filler = String(repeating: "古い出力の行です。\n", count: 200)
+        let before = Fixture(leadingFiller: filler)
+        let rule = String(repeating: "─", count: 40)
+        let final = "> \(Fixture.original)\n\n⏺ 前の応答です。\n\n> [Pasted text #1]\n\n⏺ 応答です。\n\n"
+            + "\(rule)\n> \n\(rule)\n"
+        XCTAssertEqual(
+            AutoLearnTerminalSentEcho.locate(
+                baselineFieldText: before.baseline, finalFieldText: final,
+                pastedRange: before.pastedRange, originalPastedText: Fixture.original
+            ),
+            .notFound
+        )
+    }
+
+    /// 描き直されていなければ、入力欄に入力例の文が出ていても、先頭から比べる探し方で見つける。
+    func testPlaceholderInInputFallsBackToCommonPrefix() {
+        let fixture = Fixture()
+        let rule = String(repeating: "─", count: 40)
+        let final = fixture.history + "> \(Fixture.corrected)\n\n⏺ 了解しました。確認します。\n\n"
+            + "\(rule)\n> Try \"refactor this function\"\n\(rule)\n  ? for shortcuts\n"
+        let probe = AutoLearnTerminalSentEcho.probe(
+            baselineFieldText: fixture.baseline, finalFieldText: final,
+            pastedRange: fixture.pastedRange, originalPastedText: Fixture.original
+        )
+        XCTAssertEqual(probe.result, .revised(original: Fixture.original, corrected: Fixture.corrected))
+        XCTAssertEqual(probe.method, .commonPrefix)
+    }
+
     func testReplyLineIsNotTakenAsEcho() {
         let fixture = Fixture()
         let head = (fixture.baseline as NSString).substring(to: fixture.pastedRange.location - 2)

@@ -103,7 +103,8 @@ enum AutoLearnTerminalFinalizer {
                     echoLineOffset: resolution.sentEchoProbe?.echoLineLocation.map {
                         $0 - resolution.pastedLocation
                     },
-                    echoLineUTF16: resolution.sentEchoProbe?.echoLineUTF16
+                    echoLineUTF16: resolution.sentEchoProbe?.echoLineUTF16,
+                    echoMethod: resolution.sentEchoProbe?.method?.rawValue
                 )
             )
         }

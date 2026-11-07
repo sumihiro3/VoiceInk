@@ -49,6 +49,8 @@ struct AutoLearnTerminalDiagnosticFields: Equatable, Sendable {
     /// 送った文とみなした行の先頭の、貼り付けた位置からのずれ(負なら前)。
     var echoLineOffset: Int?
     var echoLineUTF16: Int?
+    /// 送った文の行の探し方(`prompt-line`・`common-prefix`)。
+    var echoMethod: String?
 }
 
 /// 口述の中身を含まない調査用ログ。長さ・位置・理由・アプリの識別子だけを出す。
@@ -121,6 +123,7 @@ enum AutoLearnDiagnostics {
                 "commonPrefixUTF16=\(terminal.commonPrefixUTF16.map(String.init) ?? "none")",
                 "echoLineOffset=\(terminal.echoLineOffset.map(String.init) ?? "none")",
                 "echoLineUTF16=\(terminal.echoLineUTF16.map(String.init) ?? "none")",
+                "echoMethod=\(terminal.echoMethod.map(sanitizedToken) ?? "none")",
             ]
         }
         return parts.joined(separator: " ")
