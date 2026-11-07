@@ -182,6 +182,14 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 - 対応: 確定させるときに直しが取れず、入力欄が元の文のまま(`not-revised`)でもなければ、送った文の行を調べる(FR-02 AC-3)。実機の5回目の並びを再現したテスト `testSentEchoIsUsedWhenPasteWasAtEndOfScreen` を足した(直す前の条件では失敗し、直したあとは通ることを確かめた)
 - AC-5 の材料: 12.7万文字の履歴で、貼り付けたときの読み取りが取れ、1秒ごとの読み取りは最大8ミリ秒
 
+### 2026-11-07 6回目・7回目(ビルド 06af4bf)
+
+- 口述はどちらも「ProToPedia Video Makerを作りました。」(29文字+末尾の空白)。「ProTo」を「Proto」に直した(大文字・小文字だけの直し)
+- 6回目(09:39、貼り付け先は Ghostty の zsh のプロンプト。Enter で文がコマンドとして実行され、次の行に `zsh: command not found: ProtoPedia` が出た): `fieldUTF16=108 pastedLocation=78 pastedLength=30 matchedLength=30`、確定は `finalStage=too-many-line-breaks source=sent-echo sentEcho=revised originalUTF16=29 correctedUTF16=64`。送った文の行を使う処理は動いたが、取った文が64文字で、正しい29文字より35文字長い。29 + 1 + 34(`zsh: command not found: ProtoPedia` の長さ)= 64 なので、読み取った文字では、送った文とコマンドの出力が1行に並んでいたと見ている(未確認)。審査は `rejected=1`
+- 7回目(09:42、貼り付け先は Ghostty の Claude Code): `fieldUTF16=3013 pastedLocation=2446 pastedLength=30 matchedLength=29`、確定は `reason=focus finalUTF16=3013 stage=revised beforeAnchors=1 afterAnchors=1 tracked=no maxReadMs=5 originalUTF16=29 correctedUTF16=29 finalStage=revised source=final`。確定させるときの入力欄から、正しい長さの直しが取れた。画面の文字数が貼り付けたときと同じなので、Enter で送る前にフォーカスが外れて確定したと見ている(AC-4 の形)。審査は `rejected=1`
+- 却下の理由: 審査の指示文(本家)に「大文字・小文字だけの直しは却下する」(`AutoLearnAIReviewer.swift` の "Reject case-only changes")とあり、どちらも大文字・小文字だけの直しだった。取り出しの不具合ではない
+- 判定: Claude Code では、Enter で送ったとき(5回目の後の直し、`source=sent-echo` は Claude Code では未確認)と送らずに離れたとき(7回目、`source=final`)の取り出しが動いている。shell のプロンプトは対象外(要件の範囲は Claude Code)。6回目の現象は既知課題に起票する
+
 ## 実機で確かめる未解決事項
 
 | 項目 | 確かめ方 | 結果 | 日付 |
