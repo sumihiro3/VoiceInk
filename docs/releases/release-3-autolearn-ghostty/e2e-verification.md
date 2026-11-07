@@ -36,6 +36,7 @@ ssh mbp "/usr/bin/log show --last 10m --info --predicate 'subsystem == \"com.pra
 | `finalStage`・`finalCorrectedUTF16` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 確定時の状態から直しを取り出したときの段階と、直した文の長さ(持っておいた直しを使ったときも調べる) |
 | `source` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 使った直しの出どころ。`final`(確定させるときの入力欄)・`sent-echo`(Enter で送ったあとの送った文の行)・`tracked`(1秒ごとの読み取りで最後に取れた直し)・`none` |
 | `baselineUTF16`・`commonPrefixUTF16`・`echoLineOffset`・`echoLineUTF16` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 貼り付けたときの画面の長さ、送ったあとの画面と先頭から一致した長さ、送った文とみなした行の貼り付けた位置からのずれと長さ。送った文の行が見つからないときに、画面が描き直されたのか(`commonPrefixUTF16` が小さい)、行を見分けられないのかを区別する |
+| `echoMethod` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 送った文の行の探し方。`prompt-line`(画面の最後から上へプロンプトの行を探した)・`common-prefix`(貼り付けたときの画面と先頭から比べた) |
 | `sentEcho` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 入力欄が空のときに送った文の行を調べた結果。`revised`・`unchanged`(直さずに送った)・`not-found` |
 | `Queued … candidate(s)` | AutoLearn | 候補がキューに入ったこと |
 | `Auto Learn review completed` | AutoLearnAIReview | 審査が完了したこと |
@@ -207,6 +208,7 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 - 見えた問題: c2160c5 の「画面の文字が増えていなければ消したとみなす」は、描き直しで画面が大きく減ったときにも当てはまり、持っておいた直しがあれば捨ててしまう(10回目は持っておいた直しが無かったので影響なし)
 - 対応: 消したとみなすのを、画面の減り方が 0 以上で貼り付けた長さ + 64 以下のときに限った(8回目は28、10回目は2086)。テスト `testRedrawnScreenStillUsesTrackedRevision` を足した(前の条件では失敗し、直したあとは通る)。確定させる行に `baselineUTF16`・`commonPrefixUTF16`・`echoLineOffset`・`echoLineUTF16` を足し、送った文の行が見つからないときに、描き直しか行を見分けられないかを区別できるようにした
 - 残る課題: 描き直されたあとの画面で送った文の行を探す方法。入力欄の位置から上へ、元の文に似た最も近い行を探す案を相談する
+- 対応(ユーザーの了承のあと、ビルド 98ed50a): 画面が増えた・描き直されたときは、画面の最後から上へ、本文が空でないいちばん新しいプロンプトの行(`>` などで始まる行)を送った文の行とする(FR-02 AC-7)。描き直されていないのに決まらないときは、先頭から比べる探し方に戻す。確定させる行に `echoMethod`(`prompt-line`・`common-prefix`)を足した。Ink(Claude Code の画面を描くライブラリ)は、出力が端末の高さを超えると履歴を消して描き直すという報告がある(Claude Code の issue #2479 など。公式の資料ではない)
 
 ## 実機で確かめる未解決事項
 
