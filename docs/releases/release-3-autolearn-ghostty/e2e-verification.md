@@ -46,7 +46,7 @@ ssh mbp "/usr/bin/log show --last 10m --info --predicate 'subsystem == \"com.pra
 
 | AC | 内容 | 結果 | 日付 | 備考(`fieldUTF16`・`stage`・`tracked`・`reads`・`maxReadMs`・`beforeAnchors`) |
 | --- | --- | --- | --- | --- |
-| AC-2 | Ghostty で Enter で送る | | | |
+| AC-2 | Ghostty で Enter で送る | 合格(5回目。`source=tracked` だったので、4acc162 で `source=sent-echo` を再確認する) | 2026-11-07 | `fieldUTF16=126990`・`stage=revised`・`tracked=yes`・`reads=17`・`maxReadMs=8`・`beforeAnchors=2` |
 | AC-3 | 応答の文字が候補に入らない | | | |
 | AC-4 | Ghostty で Enter で送らない | | | |
 | AC-5 | 長い履歴(10万文字超) | | | |
@@ -175,8 +175,9 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 - 貼り付けたとき: `result=captured fieldUTF16=126990 pastedLocation=126969 pastedLength=21 matchedLength=21`。履歴が10万文字を超えていても、入力欄の位置で取れた。貼り付けた文字が画面の文字の最後にある(126969 + 21 = 126990)
 - 確定させるとき: `reason=focus finalUTF16=127112 revision=found stage=revised beforeAnchors=2 afterAnchors=0 reads=17 tracked=yes maxReadMs=8 updates=9 lastUpdateAgeMs=5956 originalUTF16=20 correctedUTF16=28 finalStage=too-long source=tracked sentEcho=none`
 - 候補(待ち行列の中身): 元「オートペティアビデオメーカーを作ったよ」→ 直した後「ProtoPedia Video Makerを作ったよ」。4回目のような直しの途中の文字は残っていない(最後の直しから確定まで約6秒あった)
-- 審査: Gemini の時間切れ(`LLMKitError code=8`)が続き、やり直し中
-- 判定: AC-2 は審査待ち。ただし送った文の行は使われていない(`source=tracked`)。今回は持っておいた直しが正しかっただけで、4回目と同じ取りこぼしが起こりうる
+- 審査: Gemini(`gemini-3.8-flash`)は5回とも90秒の時間切れ(`LLMKitError code=8`)で、やり直しの上限に達した(09:30:32)。審査のモデルを Anthropic に変えると、すぐに審査が始まり(09:32:20、ログの `model=claude-sonnet-5-5`。設定はその後 `claude-haiku-5-5`)、2秒で完了した。結果は `replacementAndVocabulary=1 rejected=0`
+- 辞書: 単語置換「オートペティアビデオメーカー → ProtoPedia Video Maker」と、語彙「ProtoPedia Video Maker」が増えた
+- 判定: AC-2 は合格(辞書が増えた)。ただし送った文の行は使われていない(`source=tracked`)。今回は持っておいた直しが正しかっただけで、4回目と同じ取りこぼしが起こりうる。下の対応を入れたビルドで、`source=sent-echo` をもう一度確かめる
 - 原因: 貼り付けた文字の後ろに文字が無いため、後ろの目印が無い(`afterAnchors=0`)。Enter で送ったあとの確定では、前の目印から画面の最後(送った文・応答・新しい入力欄)までを切り出すので `too-long` になった。送った文の行は、入力欄が空(`input-empty`)のときだけ調べる作りだった
 - 対応: 確定させるときに直しが取れず、入力欄が元の文のまま(`not-revised`)でもなければ、送った文の行を調べる(FR-02 AC-3)。実機の5回目の並びを再現したテスト `testSentEchoIsUsedWhenPasteWasAtEndOfScreen` を足した(直す前の条件では失敗し、直したあとは通ることを確かめた)
 - AC-5 の材料: 12.7万文字の履歴で、貼り付けたときの読み取りが取れ、1秒ごとの読み取りは最大8ミリ秒
