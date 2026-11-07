@@ -174,9 +174,9 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
     ///    あって後ろの目印が無く、応答まで切り出して `too-long` になるときもここに来る(実機の5回目)。
     /// 3. どちらでも決まらなければ、1秒ごとの読み取りで最後に取れた直しを使う。
     ///    1秒ごとの読み取りは Enter の直前の直しに間に合わないことがあるため、最後の手段にする。
-    ///    ただし、送った文の行が見つからず、画面の文字の減り方が貼り付けた長さ(と余裕)以内なら、
-    ///    送らずに入力欄を消したとみなして使わない。消している途中の状態を候補にしないため(実機の8回目)。
-    ///    それより大きく減ったときは画面の描き直し(実機の10回目)とみなし、持っておいた直しを使う。
+    ///    ただし、送った文の行が見つからず、送らずに入力欄を消したとみなせるときは使わない。消している
+    ///    途中の状態を候補にしないため(実機の8回目)。消したかは、いちばん新しいプロンプトの行が貼り付ける
+    ///    前からあった行か(実機の12回目)で決め、プロンプトの行が無いときだけ画面の減り方で決める。
     func resolve(finalFieldText: String?) -> Resolution {
         stop()
         var revision: AutoLearnRevision?
@@ -207,11 +207,13 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
         let sentEcho = sentEchoProbe?.result
         let baselineLength = (baselineFieldText as NSString).length
         let shrink = baselineLength - (finalFieldText.map { ($0 as NSString).length } ?? baselineLength)
-        // 消したときは、画面が貼り付けた長さほど短くなるだけ(実機の8回目: 28)。それより大きく
-        // 縮んだときは、Claude Code が画面を描き直したとみなす(実機の10回目: 2086)。
-        let clearedWithoutSending = sentEcho == .notFound
-            && shrink >= 0
+        // 消したかどうかは、まず画面の中身で決める: いちばん新しいプロンプトの行が貼り付ける前から
+        // あった行なら、送った文の行は無い(実機の12回目)。プロンプトの行が無いとき(shell など)だけ、
+        // 画面の減り方が貼り付けた長さほどかで決める(実機の8回目: 28。描き直しの10回目: 2086)。
+        let clearedByLength = shrink >= 0
             && shrink <= pastedRange.length + AutoLearnTerminalRevisionLocator.correctedLengthSlackUTF16
+        let clearedWithoutSending = sentEcho == .notFound
+            && (sentEchoProbe?.promptLineWasOld ?? clearedByLength)
         if source == .none, !clearedWithoutSending, let lastRevision {
             revision = lastRevision
             source = .tracked

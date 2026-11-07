@@ -37,6 +37,7 @@ ssh mbp "/usr/bin/log show --last 10m --info --predicate 'subsystem == \"com.pra
 | `source` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 使った直しの出どころ。`final`(確定させるときの入力欄)・`sent-echo`(Enter で送ったあとの送った文の行)・`tracked`(1秒ごとの読み取りで最後に取れた直し)・`none` |
 | `baselineUTF16`・`commonPrefixUTF16`・`echoLineOffset`・`echoLineUTF16` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 貼り付けたときの画面の長さ、送ったあとの画面と先頭から一致した長さ、送った文とみなした行の貼り付けた位置からのずれと長さ。送った文の行が見つからないときに、画面が描き直されたのか(`commonPrefixUTF16` が小さい)、行を見分けられないのかを区別する |
 | `echoMethod` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 送った文の行の探し方。`prompt-line`(画面の最後から上へプロンプトの行を探した)・`common-prefix`(貼り付けたときの画面と先頭から比べた) |
+| `promptLineOld` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | いちばん新しいプロンプトの行が、貼り付ける前からあった行だったか。`yes` なら送らずに消したとみなした。`no` なら送った文の行とした。`none` はプロンプトの行を調べなかった、または無かった |
 | `sentEcho` | AutoLearnDiagnostics(確定させるとき、Ghostty だけ) | 入力欄が空のときに送った文の行を調べた結果。`revised`・`unchanged`(直さずに送った)・`not-found` |
 | `Queued … candidate(s)` | AutoLearn | 候補がキューに入ったこと |
 | `Auto Learn review completed` | AutoLearnAIReview | 審査が完了したこと |
@@ -215,6 +216,7 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 - 12回目(12:03): 「隣の町に着いた。…」(22文字)。合っていたので入力欄から消した(ユーザーの確認)。確定は `reason=recording-start baselineUTF16=971 finalUTF16=949`(ちょうど貼り付けた長さ22だけ減った)`updates=0 sentEcho=not-found echoMethod=common-prefix source=none`。候補なしで正しい
 - 13回目(12:04): 「円と縦の看板がある。 これが武器屋。…」(40文字)を「剣と盾の看板がある。これが武器屋だ。…」に直した(ユーザーの確認)。確定は `reason=focus baselineUTF16=989 finalUTF16=990 source=final originalUTF16=40 correctedUTF16=41`。入力欄から正しい長さの直しが取れ、候補2件になった。審査は `rejected=1` が2件。審査の指示文(本家)は、普通の語の聞き違い(汎用の音声認識が直すべきもの)を登録しないので、その判断と見ている
 - 気づいた点: 10:03 から、画面の文字数が 950〜990 ほどでほぼ一定になった(それより前は履歴とともに 3013 → 3035 と増えていた)。Claude Code が固定の大きさの別の画面に描くモードに切り替わり、見えている画面だけが読み取られていると見ている(未確認)。この場合、Enter で送っても画面の文字は貼り付けた長さほど減るので、減り方で「送った」と「消した」を見分ける判定は当てにならない。Enter で送ったときの確認は、この画面のモードではまだ
+- 対応(ユーザーの了承のあと): 画面の文字数の増減に関係なく、画面の最後から上へいちばん新しいプロンプトの行を探す。その行が貼り付ける前からあった行なら送らずに消したとみなし、持っておいた直しも使わない(FR-02 AC-3・AC-7)。新しい行なら送った文の行とする。プロンプトの行が無いときだけ、画面の減り方で消したかを決める。確定させる行に `promptLineOld`(`yes`・`no`・`none`)を足した。固定の大きさの画面を再現したテスト`testEchoIsFoundOnFixedSizeScreen` と `testClearedOnFixedSizeScreenIgnoresTrackedRevision` を足した
 
 ## 実機で確かめる未解決事項
 

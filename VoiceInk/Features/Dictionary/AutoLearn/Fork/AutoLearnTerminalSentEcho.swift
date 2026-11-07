@@ -42,6 +42,9 @@ enum AutoLearnTerminalSentEcho {
         /// 送った文とみなした行の長さ(プロンプトの記号を外す前)。
         let echoLineUTF16: Int?
         var method: Method?
+        /// いちばん新しいプロンプトの行が、貼り付けたときにすでにあった行だったか(送らずに消した)。
+        /// プロンプトの行を調べなかったときは nil。
+        var promptLineWasOld: Bool?
     }
 
     /// プロンプトの行とみなす、行頭(空白と枠の記号を除いたあと)の記号。
@@ -64,13 +67,14 @@ enum AutoLearnTerminalSentEcho {
 
     /// `locate` と同じ判定をし、ログ用の位置と長さも返す。
     ///
-    /// 1. 画面の文字が増えた、または貼り付けた長さより大きく減った(描き直し)ときは、画面の最後から
-    ///    上へ、空でないいちばん新しいプロンプトの行を送った文の行とみなす。Claude Code は送った文を
-    ///    `> ` で始まる行として履歴に残し、新しい入力欄は空になる。描き直されても位置に依存しない
-    ///    (実機の10回目)。見分けられなくても、それより前の行には進まない(前に送った同じ文を拾わない)。
-    /// 2. 描き直されていないのにプロンプトの行で決まらないとき(入力欄に入力例の文が出ているなど)、
-    ///    または画面の減り方が貼り付けた長さほど(入力欄を消した)のときは、貼り付けたときの画面と
-    ///    先頭から比べ、最初に違う行を使う。
+    /// 1. 画面の最後から上へ、空でないいちばん新しいプロンプトの行を探す。Claude Code は送った文を
+    ///    `> ` で始まる行として履歴に残し、新しい入力欄は空になる。描き直されても(実機の10回目)、
+    ///    画面の大きさが一定でも(実機の12回目)、位置や長さに依存しない。
+    ///    - その行が、貼り付けたときに貼り付けた行より前にすでにあった行なら、前に送った文なので、
+    ///      送らずに入力欄を消したとみなす(`promptLineWasOld`)。
+    ///    - 新しい行なら、送った文の行とみなす。見分けられなくても、それより前の行には進まない。
+    /// 2. プロンプトの行が無いとき、または描き直されていないのにプロンプトの行で決まらないとき
+    ///    (入力欄に入力例の文が出ているなど)は、貼り付けたときの画面と先頭から比べ、最初に違う行を使う。
     static func probe(
         baselineFieldText: String,
         finalFieldText: String,
@@ -86,13 +90,24 @@ enum AutoLearnTerminalSentEcho {
         let finalText = finalFieldText as NSString
         let shrink = baseline.count - final.count
         let slack = pastedRange.length + AutoLearnTerminalRevisionLocator.correctedLengthSlackUTF16
-        let looksCleared = shrink >= 0 && shrink <= slack
         let redrawn = shrink > slack
-        if !looksCleared, let lineRange = latestPromptLine(in: finalText) {
+        // 新しいプロンプトの行を見たなら、先頭から比べる探し方に戻っても「消した」とはしない。
+        var sawNewPromptLine = false
+        if let lineRange = latestPromptLine(in: finalText) {
+            if isLine(lineRange, of: finalText, inBaseline: baselineFieldText, before: pastedRange.location) {
+                return Probe(
+                    result: .notFound, commonPrefixUTF16: common, echoLineLocation: lineRange.location,
+                    echoLineUTF16: (finalText.substring(with: lineRange)
+                        .trimmingCharacters(in: .newlines) as NSString).length,
+                    method: .promptLine, promptLineWasOld: true
+                )
+            }
             var probe = judge(
                 lineRange: lineRange, in: finalText, common: common, originalPastedText: originalPastedText
             )
             probe.method = .promptLine
+            probe.promptLineWasOld = false
+            sawNewPromptLine = true
             // 入力欄に入力例の文が出ていると、いちばん新しいプロンプトの行がそれになる。描き直されて
             // いなければ、先頭から比べる探し方に戻す。描き直されていれば、先頭からの比較は意味が無い。
             if probe.result != .notFound || redrawn { return probe }
@@ -103,10 +118,11 @@ enum AutoLearnTerminalSentEcho {
             )
         }
 
+        let wasOld: Bool? = sawNewPromptLine ? false : nil
         guard common + AutoLearnTerminalRevisionLocator.searchRadiusUTF16 >= pastedRange.location else {
             return Probe(
                 result: .notFound, commonPrefixUTF16: common, echoLineLocation: nil, echoLineUTF16: nil,
-                method: .commonPrefix
+                method: .commonPrefix, promptLineWasOld: wasOld
             )
         }
 
@@ -123,6 +139,7 @@ enum AutoLearnTerminalSentEcho {
             lineRange: lineRange, in: finalText, common: common, originalPastedText: originalPastedText
         )
         probe.method = .commonPrefix
+        probe.promptLineWasOld = wasOld
         return probe
     }
 
@@ -155,6 +172,20 @@ enum AutoLearnTerminalSentEcho {
 
         if original == corrected { return finish(.unchanged) }
         return finish(.revised(original: original, corrected: corrected))
+    }
+
+    /// `lineRange` の行が、貼り付けたときの画面の、貼り付けた行より前に同じ行としてあったか。
+    private static func isLine(
+        _ lineRange: NSRange, of finalText: NSString, inBaseline baselineFieldText: String, before location: Int
+    ) -> Bool {
+        let baseline = baselineFieldText as NSString
+        let pasteLineStart = baseline.lineRange(for: NSRange(location: min(location, baseline.length), length: 0)).location
+        let line = finalText.substring(with: lineRange).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty, pasteLineStart > 0 else { return false }
+        let earlier = baseline.substring(to: pasteLineStart)
+        return earlier.split(separator: "\n", omittingEmptySubsequences: true).contains {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines) == line
+        }
     }
 
     /// 画面の最後から上へ、本文が空でないいちばん新しいプロンプトの行を探す。空の入力欄は読み飛ばす。

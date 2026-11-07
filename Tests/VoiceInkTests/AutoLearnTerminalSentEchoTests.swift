@@ -63,6 +63,34 @@ final class AutoLearnTerminalSentEchoTests: XCTestCase {
         }
     }
 
+    /// 画面の大きさが一定(見えている画面だけを読む)で、Enter で送ると上の行が画面の外へ出て、画面の文字が
+    /// 貼り付けた長さほど減る。減り方では消したときと見分けられないが、送った文の行は新しい行なので見つける。
+    func testEchoIsFoundOnFixedSizeScreen() {
+        for style in styles {
+            let fixture = Fixture(style: style)
+            let history = fixture.history as NSString
+            let tail = (fixture.sentFinal as NSString).substring(from: history.length)
+            let baselineLength = (fixture.baseline as NSString).length
+            let target = baselineLength - fixture.pastedRange.length
+            let dropped = history.length + (tail as NSString).length - target
+            XCTAssertGreaterThan(dropped, 0, "\(style)")
+            let final = history.substring(from: dropped) + tail
+            XCTAssertEqual(baselineLength - (final as NSString).length, fixture.pastedRange.length, "\(style)")
+
+            let probe = AutoLearnTerminalSentEcho.probe(
+                baselineFieldText: fixture.baseline, finalFieldText: final,
+                pastedRange: fixture.pastedRange, originalPastedText: Fixture.original
+            )
+            XCTAssertEqual(
+                probe.result,
+                .revised(original: Fixture.original, corrected: Fixture.corrected),
+                "\(style)"
+            )
+            XCTAssertEqual(probe.method, .promptLine, "\(style)")
+            XCTAssertEqual(probe.promptLineWasOld, false, "\(style)")
+        }
+    }
+
     /// 応答が元の文を引用しても、プロンプトの記号で始まらない行は送った文とみなさない。
     func testQuotedReplyIsNotTakenAsEcho() {
         let filler = String(repeating: "古い出力の行です。\n", count: 200)
@@ -108,6 +136,7 @@ final class AutoLearnTerminalSentEchoTests: XCTestCase {
         )
         XCTAssertEqual(probe.result, .revised(original: Fixture.original, corrected: Fixture.corrected))
         XCTAssertEqual(probe.method, .commonPrefix)
+        XCTAssertEqual(probe.promptLineWasOld, false)
     }
 
     func testReplyLineIsNotTakenAsEcho() {

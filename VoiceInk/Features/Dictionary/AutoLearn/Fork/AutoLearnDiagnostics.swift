@@ -51,6 +51,8 @@ struct AutoLearnTerminalDiagnosticFields: Equatable, Sendable {
     var echoLineUTF16: Int?
     /// 送った文の行の探し方(`prompt-line`・`common-prefix`)。
     var echoMethod: String?
+    /// いちばん新しいプロンプトの行が貼り付ける前からあった行だったか(`yes`・`no`、調べなければ `none`)。
+    var promptLineOld: Bool?
 }
 
 /// 口述の中身を含まない調査用ログ。長さ・位置・理由・アプリの識別子だけを出す。
@@ -124,6 +126,7 @@ enum AutoLearnDiagnostics {
                 "echoLineOffset=\(terminal.echoLineOffset.map(String.init) ?? "none")",
                 "echoLineUTF16=\(terminal.echoLineUTF16.map(String.init) ?? "none")",
                 "echoMethod=\(terminal.echoMethod.map(sanitizedToken) ?? "none")",
+                "promptLineOld=\(terminal.promptLineOld.map { $0 ? "yes" : "no" } ?? "none")",
             ]
         }
         return parts.joined(separator: " ")

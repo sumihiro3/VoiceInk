@@ -104,7 +104,8 @@ enum AutoLearnTerminalFinalizer {
                         $0 - resolution.pastedLocation
                     },
                     echoLineUTF16: resolution.sentEchoProbe?.echoLineUTF16,
-                    echoMethod: resolution.sentEchoProbe?.method?.rawValue
+                    echoMethod: resolution.sentEchoProbe?.method?.rawValue,
+                    promptLineOld: resolution.sentEchoProbe?.promptLineWasOld
                 )
             )
         }

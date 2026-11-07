@@ -183,13 +183,33 @@ final class AutoLearnTerminalSnapshotTrackerTests: XCTestCase {
         scheduler.fire()
         XCTAssertNotNil(tracker.lastRevision)
 
-        let resolution = tracker.resolve(finalFieldText: redrawn.clearedFinal)
+        // 送った文の行はあるが見分けられない(新しい行)。消したのではないので、持っておいた直しを使う。
+        let resolution = tracker.resolve(finalFieldText: redrawn.sentPlaceholderFinal)
         XCTAssertEqual(resolution.sentEcho, .notFound)
+        XCTAssertEqual(resolution.sentEchoProbe?.promptLineWasOld, false)
         XCTAssertEqual(resolution.sentEchoProbe?.commonPrefixUTF16, 0)
         XCTAssertEqual(resolution.source, .tracked)
         XCTAssertEqual(resolution.revision?.corrected, AutoLearnTerminalFixture.corrected)
         XCTAssertEqual(resolution.baselineUTF16, (before.baseline as NSString).length)
         XCTAssertEqual(resolution.pastedLocation, before.pastedRange.location)
+    }
+
+    /// 実機の12回目の画面: 画面の大きさが一定で、入力欄を消すと画面の文字が貼り付けた長さだけ減る。
+    /// いちばん新しいプロンプトの行は前からあった行なので、消したとみなす。
+    func testClearedOnFixedSizeScreenIgnoresTrackedRevision() {
+        let reader = FakeReader([fixture.revisedFinal])
+        let scheduler = FakeScheduler()
+        let tracker = makeTracker(reader: reader, scheduler: scheduler)
+        tracker.start()
+        scheduler.fire()
+        XCTAssertNotNil(tracker.lastRevision)
+
+        let resolution = tracker.resolve(finalFieldText: fixture.clearedFinal)
+        XCTAssertEqual(resolution.sentEcho, .notFound)
+        XCTAssertEqual(resolution.sentEchoProbe?.method, .promptLine)
+        XCTAssertEqual(resolution.sentEchoProbe?.promptLineWasOld, true)
+        XCTAssertEqual(resolution.source, .none)
+        XCTAssertNil(resolution.revision)
     }
 
     func testCountsRevisionUpdatesAndAgeAndProbesFinal() {
