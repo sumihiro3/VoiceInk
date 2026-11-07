@@ -190,6 +190,13 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 - 却下の理由: 審査の指示文(本家)に「大文字・小文字だけの直しは却下する」(`AutoLearnAIReviewer.swift` の "Reject case-only changes")とあり、どちらも大文字・小文字だけの直しだった。取り出しの不具合ではない
 - 判定: Claude Code では、Enter で送ったとき(5回目の後の直し、`source=sent-echo` は Claude Code では未確認)と送らずに離れたとき(7回目、`source=final`)の取り出しが動いている。shell のプロンプトは対象外(要件の範囲は Claude Code)。6回目の現象は既知課題に起票する
 
+### 2026-11-07 8回目・9回目(ビルド 06af4bf、Claude Code)
+
+- 8回目(09:45): 口述(28文字)を貼り付けたあと、入力欄の文を消して、次の録音を始めた(ユーザーの確認)。確定は `reason=recording-start finalUTF16=2984`(貼り付けたときの3012より28短い)`finalStage=input-empty sentEcho=not-found source=tracked originalUTF16=28 correctedUTF16=7`。送った文の行が無いのは正しいが、持っておいた直しとして、消している途中の状態(7文字)が候補になった。審査は `rejected=1` で、辞書は変わらなかった
+- 9回目(09:46): 「…封入した状態で、さ3cmを超えるもの…」(61文字)の「さ」を「高さ」に直し、Enter で送らずに離れた(ユーザーの確認)。確定は `reason=focus source=final originalUTF16=61 correctedUTF16=62`。取り出しは正しい。候補はできなかった。本家の差分の処理(`CorrectionDiffEngine`)は、共通する前後を外したあと元の側が空になる直し(文字を足すだけ)を候補にしないため。本家の作りで、Ghostty の取り出しの不具合ではない
+- 見えた問題: 入力欄を消して送らなかったときに、持っておいた直しへ戻ると、消している途中の状態を候補にしてしまう。今回は審査が却下したが、審査に頼る形になっている
+- 未確認のまま: Claude Code で Enter で送ったときに、送った文の行から直しを取ること(`source=sent-echo`)
+
 ## 実機で確かめる未解決事項
 
 | 項目 | 確かめ方 | 結果 | 日付 |
