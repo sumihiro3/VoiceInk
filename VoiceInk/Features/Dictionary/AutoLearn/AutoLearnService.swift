@@ -213,7 +213,7 @@ actor AutoLearnService {
     func recordingDidStart() async {
         guard AutoLearnSettings.isEnabled else { return }
         if let token = activeToken {
-            await completeSession(token: token, persist: true)
+            await completeSession(token: token, persist: true, reason: .recordingStart)
         }
         lifecycleGeneration &+= 1
         await discardActiveSession()
@@ -248,7 +248,7 @@ actor AutoLearnService {
             if let previousToken {
                 // `finishSnapshot` drops the session, so the pending capture is
                 // cancelled before a new one can be started.
-                await self?.persistFinishedSession(token: previousToken)
+                await self?.persistFinishedSession(token: previousToken, reason: .nextPaste)
             }
             await self?.beginObservation(
                 text: text,
@@ -337,7 +337,11 @@ actor AutoLearnService {
         }
     }
 
-    private func completeSession(token: AutoLearnPasteToken, persist: Bool) async {
+    private func completeSession(
+        token: AutoLearnPasteToken,
+        persist: Bool,
+        reason: AutoLearnFinalizeReason = .deadline
+    ) async {
         guard activeToken == token, activeGeneration != nil else { return }
         deadlineTask?.cancel()
         activeToken = nil
@@ -349,17 +353,20 @@ actor AutoLearnService {
         focusObserver.stop()
 
         if persist {
-            await persistFinishedSession(token: token)
+            await persistFinishedSession(token: token, reason: reason)
         } else {
             await accessibilityRuntime.discard(token: token)
         }
     }
 
-    private func persistFinishedSession(token: AutoLearnPasteToken) async {
+    private func persistFinishedSession(
+        token: AutoLearnPasteToken,
+        reason: AutoLearnFinalizeReason
+    ) async {
         let cancellationGeneration = snapshotCancellationGeneration
-        let snapshot = await accessibilityRuntime.finishSnapshot(token: token)
+        let observation = await accessibilityRuntime.finishSnapshot(token: token)
         guard snapshotCancellationGeneration == cancellationGeneration else { return }
-        await persistSnapshot(snapshot)
+        await persistSnapshot(observation, reason: reason)
     }
 
     private func finalizeIfFocusLeft(token: AutoLearnPasteToken) async {
@@ -372,7 +379,7 @@ actor AutoLearnService {
         }
 
         guard !(await accessibilityRuntime.targetIsFocused(token: token)) else { return }
-        await completeSession(token: token, persist: true)
+        await completeSession(token: token, persist: true, reason: .focus)
     }
 
     private func scheduleDeadline(token: AutoLearnPasteToken, after delay: UInt64) {
@@ -388,15 +395,16 @@ actor AutoLearnService {
 
     private func finalizeAtDeadline(token: AutoLearnPasteToken) async {
         guard activeToken == token, AutoLearnSettings.isEnabled else { return }
-        await completeSession(token: token, persist: true)
+        await completeSession(token: token, persist: true, reason: .deadline)
     }
 
-    private func persistSnapshot(_ snapshot: AutoLearnFieldSnapshot?) async {
-        guard AutoLearnSettings.isEnabled,
-            let snapshot
-        else { return }
+    private func persistSnapshot(
+        _ observation: AutoLearnFinishedObservation,
+        reason: AutoLearnFinalizeReason
+    ) async {
+        guard AutoLearnSettings.isEnabled else { return }
 
-        guard let revision = FinalSnapshotDiffEngine.revision(from: snapshot) else { return }
+        guard let revision = AutoLearnTerminalFinalizer.revision(for: observation, reason: reason) else { return }
         let candidates = CorrectionDiffEngine.candidates(from: revision)
         guard !candidates.isEmpty else { return }
 

@@ -10,6 +10,9 @@ final class AutoLearnAXRuntime: @unchecked Sendable {
         let baselineFieldText: String
         let pastedRange: NSRange
         let pastedText: String
+        // Fork: Ghostty 対応(release-3)
+        var bundleIdentifier: String? = nil
+        var terminalTracker: AutoLearnTerminalSnapshotTracker? = nil
     }
 
     private let queue = DispatchQueue(label: "com.prakashjoshipax.voiceink.auto-learn.accessibility")
@@ -19,9 +22,20 @@ final class AutoLearnAXRuntime: @unchecked Sendable {
     )
     private let textReader = AutoLearnAXTextReader()
     private var session: Session?
+    // Fork: 貼り付けたときの調査ログ用。capturePastedText の間だけ使う。
+    private var captureLogBundleIdentifier: String?
+    private var captureLogPastedText = ""
+    private var captureLogLastReading: AutoLearnAXTextReading?
 
     func capturePastedText(text: String, processID: pid_t) async -> AutoLearnPasteToken? {
         await perform { [self] in
+            let bundleIdentifier = AutoLearnTerminalTarget.bundleIdentifier(processID: processID)
+            let isGhostty = AutoLearnTerminalTarget.isGhostty(bundleIdentifier: bundleIdentifier)
+            captureLogBundleIdentifier = bundleIdentifier
+            captureLogPastedText = text
+            captureLogLastReading = nil
+            defer { captureLogLastReading = nil; captureLogPastedText = "" }
+            session?.terminalTracker?.stop()
             session = nil
 
             guard AXIsProcessTrusted() else { return rejectCapture("accessibility-not-trusted") }
@@ -37,14 +51,21 @@ final class AutoLearnAXRuntime: @unchecked Sendable {
             var pastedRange: NSRange?
             var lastReading: AutoLearnAXTextReading?
 
-            let readings = textReader.focusedReadings(processID: processID)
+            let readings = textReader.focusedReadings(
+                processID: processID,
+                options: isGhostty ? .ghostty : .standard
+            )
             for reading in readings {
                 lastReading = reading
-                if let resolvedRange = resolvedPastedRange(
-                    for: text,
-                    selectionAfterPaste: reading.selection,
-                    fieldText: reading.fieldText
-                ) {
+                captureLogLastReading = reading
+                if let resolvedRange = isGhostty
+                    ? AutoLearnTerminalTarget.pastedRangeNearestToEnd(of: text, in: reading.fieldText)
+                    : resolvedPastedRange(
+                        for: text,
+                        selectionAfterPaste: reading.selection,
+                        fieldText: reading.fieldText
+                    )
+                {
                     matchedReading = reading
                     pastedRange = resolvedRange
                     break
@@ -72,28 +93,73 @@ final class AutoLearnAXRuntime: @unchecked Sendable {
                 targetElement: reading.targetElement,
                 baselineFieldText: fieldText,
                 pastedRange: pastedRange,
-                pastedText: observedPastedText
+                pastedText: observedPastedText,
+                bundleIdentifier: bundleIdentifier,
+                terminalTracker: isGhostty
+                    ? AutoLearnTerminalFinalizer.startGhosttyTracker(
+                        reader: textReader,
+                        targetElement: reading.targetElement,
+                        baselineFieldText: fieldText,
+                        pastedRange: pastedRange,
+                        pastedText: observedPastedText,
+                        queue: queue
+                    )
+                    : nil
+            )
+            AutoLearnDiagnostics.logCapture(
+                bundleIdentifier: bundleIdentifier,
+                result: "captured",
+                readingSource: reading.source,
+                fieldText: fieldText,
+                pastedRange: pastedRange,
+                selectionAvailable: reading.selection != nil,
+                pastedText: text
             )
             return token
         }
     }
 
-    func finishSnapshot(token: AutoLearnPasteToken) async -> AutoLearnFieldSnapshot? {
+    func finishSnapshot(token: AutoLearnPasteToken) async -> AutoLearnFinishedObservation {
         await perform { [self] in
-            guard let active = session, active.token == token else { return nil }
+            guard let active = session, active.token == token else {
+                return .stopped(.sessionMissing, bundleIdentifier: nil)
+            }
             session = nil
 
             defer { textReader.restoreWebAccessibility(processID: AXProcessID(active.appElement), appElement: active.appElement) }
-            guard let finalTextValue = textReader.textValue(from: active.targetElement) else { return nil }
+            if let tracker = active.terminalTracker {
+                return AutoLearnTerminalFinalizer.finishGhosttyObservation(
+                    tracker: tracker,
+                    reader: textReader,
+                    targetElement: active.targetElement,
+                    baselineFieldText: active.baselineFieldText,
+                    pastedRange: active.pastedRange,
+                    pastedText: active.pastedText,
+                    bundleIdentifier: active.bundleIdentifier
+                )
+            }
+            guard let finalTextValue = textReader.textValue(from: active.targetElement) else {
+                return .stopped(.readFailed, bundleIdentifier: active.bundleIdentifier)
+            }
             let finalFieldText = finalTextValue.text
-            guard finalFieldText.utf16.count <= AutoLearnLimits.maximumFieldUTF16Length else { return nil }
-            guard !textIsExactlyEqual(finalFieldText, active.baselineFieldText) else { return nil }
+            guard finalFieldText.utf16.count <= AutoLearnLimits.maximumFieldUTF16Length else {
+                return .stopped(.fieldTooLarge, bundleIdentifier: active.bundleIdentifier, finalFieldText: finalFieldText)
+            }
+            guard !textIsExactlyEqual(finalFieldText, active.baselineFieldText) else {
+                return .stopped(.unchanged, bundleIdentifier: active.bundleIdentifier, finalFieldText: finalFieldText)
+            }
 
-            return AutoLearnFieldSnapshot(
-                baselineFieldText: active.baselineFieldText,
+            return AutoLearnFinishedObservation(
+                snapshot: AutoLearnFieldSnapshot(
+                    baselineFieldText: active.baselineFieldText,
+                    finalFieldText: finalFieldText,
+                    pastedRange: active.pastedRange,
+                    originalPastedText: active.pastedText
+                ),
+                bundleIdentifier: active.bundleIdentifier,
                 finalFieldText: finalFieldText,
-                pastedRange: active.pastedRange,
-                originalPastedText: active.pastedText
+                stoppedStage: nil,
+                terminalResolution: nil
             )
         }
     }
@@ -109,6 +175,7 @@ final class AutoLearnAXRuntime: @unchecked Sendable {
         await perform { [self] in
             guard token == nil || session?.token == token else { return }
             if let active = session {
+                active.terminalTracker?.stop()
                 textReader.restoreWebAccessibility(processID: AXProcessID(active.appElement), appElement: active.appElement)
             }
             session = nil
@@ -128,6 +195,15 @@ final class AutoLearnAXRuntime: @unchecked Sendable {
     private func rejectCapture(_ reason: String) -> AutoLearnPasteToken? {
         logger.notice(
             "Auto Learn capture rejected reason=\(reason, privacy: .public)"
+        )
+        AutoLearnDiagnostics.logCapture(
+            bundleIdentifier: captureLogBundleIdentifier,
+            result: reason,
+            readingSource: captureLogLastReading?.source,
+            fieldText: captureLogLastReading?.fieldText,
+            pastedRange: nil,
+            selectionAvailable: captureLogLastReading.map { $0.selection != nil },
+            pastedText: captureLogPastedText
         )
         return nil
     }
