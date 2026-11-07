@@ -105,6 +105,42 @@ final class AutoLearnTerminalSnapshotTrackerTests: XCTestCase {
         XCTAssertNil(resolution.revision)
     }
 
+    /// 実機の5回目: 貼り付けた文字が画面の最後にあり、後ろの目印が無い。Enter で送ったあとの
+    /// 確定では、前の目印から画面の最後(応答と新しい入力欄)までを切り出すので too-long になる。
+    func testSentEchoIsUsedWhenPasteWasAtEndOfScreen() {
+        let original = "オートペティアビデオメーカーを作ったよ"
+        let corrected = "ProtoPedia Video Makerを作ったよ"
+        let rule = String(repeating: "─", count: 80)
+        let history = "> 前の質問です\n\n⏺ 前の応答です。\n\n\(rule)\n"
+        let baseline = history + "> \(original)"
+        let range = (baseline as NSString).range(of: original)
+        let midEdit = history + "> ProtoPedia Video Makerーを作ったよ"
+        let reply = String(repeating: "いいですね。作り方を説明します。\n", count: 8)
+        // 実機の beforeAnchors=2 に合わせ、送った文の行の前と新しい入力欄の前に同じ目印がある。
+        let final = history + "> \(corrected)\n\n⏺ \(reply)\n\(rule)\n> "
+
+        let reader = FakeReader([midEdit])
+        let scheduler = FakeScheduler()
+        let tracker = AutoLearnTerminalSnapshotTracker(
+            baselineFieldText: baseline,
+            pastedRange: range,
+            originalPastedText: original,
+            readFieldText: { reader.read() },
+            scheduler: scheduler,
+            interval: 1_000_000_000,
+            now: { 0 }
+        )
+        tracker.start()
+        scheduler.fire()
+        XCTAssertNotNil(tracker.lastRevision)
+
+        let resolution = tracker.resolve(finalFieldText: final)
+        XCTAssertEqual(resolution.finalProbe?.stage, .tooLong)
+        XCTAssertEqual(resolution.source, .sentEcho)
+        XCTAssertEqual(resolution.sentEcho, .revised(original: original, corrected: corrected))
+        XCTAssertEqual(resolution.revision?.corrected, corrected)
+    }
+
     func testCountsRevisionUpdatesAndAgeAndProbesFinal() {
         let midEdit = fixture.revisedFinal.replacingOccurrences(of: "Claude Code", with: "Claude")
         let reader = FakeReader([fixture.revisedFinal, fixture.revisedFinal, midEdit])

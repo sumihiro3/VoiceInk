@@ -168,10 +168,23 @@ WORD="<直した語>"; grep -h -F "$WORD" logs/mbp-*.log | grep "AutoLearnDiagno
 - 見立て: 最後の直し(「ー」を消す)から Enter までが短く、1秒ごとの読み取り(Ghostty 側の読み取り結果は500ミリ秒の使い回しがある)に間に合わなかった。2回目の却下も同じ原因と見る。読み取りの間隔を縮めても、この隙間は無くならない
 - 対応: 確定時の順を「確定させるときの入力欄 → 入力欄が空なら履歴に残った送った文の行 → 持っておいた直し」に改めた(FR-02 AC-3・AC-7)。確定させる行に `source`・`sentEcho` を足した。次の確認では `source=sent-echo sentEcho=revised` と、送った文の長さに合う `correctedUTF16` が出れば、この対応が効いている
 
+### 2026-11-07 5回目(ビルド 1dd8ce1)
+
+- 1度目の試行(09:10〜09:11): 録音2回は取り消され(`Streaming cancelled`)、3回目は Chrome に貼り付けられた。Ghostty の行が無く、確認にならなかった
+- 口述: 「オートペティアビデオメーカーを作ったよ」(Whisper の結果、20文字+末尾の空白)。「ProtoPedia Video Maker」に直して Enter で送った
+- 貼り付けたとき: `result=captured fieldUTF16=126990 pastedLocation=126969 pastedLength=21 matchedLength=21`。履歴が10万文字を超えていても、入力欄の位置で取れた。貼り付けた文字が画面の文字の最後にある(126969 + 21 = 126990)
+- 確定させるとき: `reason=focus finalUTF16=127112 revision=found stage=revised beforeAnchors=2 afterAnchors=0 reads=17 tracked=yes maxReadMs=8 updates=9 lastUpdateAgeMs=5956 originalUTF16=20 correctedUTF16=28 finalStage=too-long source=tracked sentEcho=none`
+- 候補(待ち行列の中身): 元「オートペティアビデオメーカーを作ったよ」→ 直した後「ProtoPedia Video Makerを作ったよ」。4回目のような直しの途中の文字は残っていない(最後の直しから確定まで約6秒あった)
+- 審査: Gemini の時間切れ(`LLMKitError code=8`)が続き、やり直し中
+- 判定: AC-2 は審査待ち。ただし送った文の行は使われていない(`source=tracked`)。今回は持っておいた直しが正しかっただけで、4回目と同じ取りこぼしが起こりうる
+- 原因: 貼り付けた文字の後ろに文字が無いため、後ろの目印が無い(`afterAnchors=0`)。Enter で送ったあとの確定では、前の目印から画面の最後(送った文・応答・新しい入力欄)までを切り出すので `too-long` になった。送った文の行は、入力欄が空(`input-empty`)のときだけ調べる作りだった
+- 対応: 確定させるときに直しが取れず、入力欄が元の文のまま(`not-revised`)でもなければ、送った文の行を調べる(FR-02 AC-3)。実機の5回目の並びを再現したテスト `testSentEchoIsUsedWhenPasteWasAtEndOfScreen` を足した(直す前の条件では失敗し、直したあとは通ることを確かめた)
+- AC-5 の材料: 12.7万文字の履歴で、貼り付けたときの読み取りが取れ、1秒ごとの読み取りは最大8ミリ秒
+
 ## 実機で確かめる未解決事項
 
 | 項目 | 確かめ方 | 結果 | 日付 |
 | --- | --- | --- | --- |
-| 読み取りが時間切れ(貼り付け時 0.1秒、以降 0.2秒)に収まるか | `maxReadMs` と、貼り付けたときの行の読み取りの結果。5.6万文字では収まっていた。10万文字超での値を記録する | | |
+| 読み取りが時間切れ(貼り付け時 0.1秒、以降 0.2秒)に収まるか | `maxReadMs` と、貼り付けたときの行の読み取りの結果。5.6万文字では収まっていた。10万文字超での値を記録する | 収まった。12.7万文字(`fieldUTF16=126990`)で貼り付けたときの読み取りが取れ、`maxReadMs=8` | 2026-11-07 |
 | 長い文を折り返したとき、読み取った文字に改行が入るか | 1行に収まらない長さの口述をし、貼り付けたときの行が `pasted-range-invalid` になるか確かめる。起きたら既知課題に起票する(このリリースでは直さない) | | |
 | Enter の直前1秒未満の直しを拾えないことが、困るほど起きるか | AC-2 で、直した直後に Enter を押して確かめる。`tracked` と `stage` を見る | | |

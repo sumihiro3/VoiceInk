@@ -162,8 +162,10 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
     /// 確定時に使う。定期読み取りを止め、次の順で直しを決める。
     ///
     /// 1. 確定させるときの入力欄から取れれば、それを使う(いちばん新しい状態)。
-    /// 2. 入力欄が空(Enter で送った)なら、履歴に残った送った文の行を使う。送った文が元の文と
-    ///    同じなら、直さずに送ったとみなして直しなしにする。
+    /// 2. 取れず、入力欄が元の文のまま(`not-revised`)でもなければ、Enter で送ったとみなし、
+    ///    履歴に残った送った文の行を使う。送った文が元の文と同じなら、直さずに送ったとみなして
+    ///    直しなしにする。入力欄が空(`input-empty`)のときのほか、貼り付けた文字が画面の最後に
+    ///    あって後ろの目印が無く、応答まで切り出して `too-long` になるときもここに来る(実機の5回目)。
     /// 3. どちらでも決まらなければ、1秒ごとの読み取りで最後に取れた直しを使う。
     ///    1秒ごとの読み取りは Enter の直前の直しに間に合わないことがあるため、最後の手段にする。
     func resolve(finalFieldText: String?) -> Resolution {
@@ -175,7 +177,7 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
         if let finalRevision = finalProbe?.revision {
             revision = finalRevision
             source = .final
-        } else if let finalFieldText, finalProbe?.stage == .inputEmpty {
+        } else if let finalFieldText, finalProbe?.stage != .notRevised {
             let echo = AutoLearnTerminalSentEcho.locate(
                 baselineFieldText: baselineFieldText,
                 finalFieldText: finalFieldText,
