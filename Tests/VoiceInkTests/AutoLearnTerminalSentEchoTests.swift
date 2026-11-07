@@ -58,6 +58,19 @@ final class AutoLearnTerminalSentEchoTests: XCTestCase {
         )
     }
 
+    func testProbeReportsCommonPrefixAndEchoLine() {
+        let fixture = AutoLearnTerminalFixture()
+        let final = fixture.sentFinal
+        let probe = AutoLearnTerminalSentEcho.probe(
+            baselineFieldText: fixture.baseline, finalFieldText: final,
+            pastedRange: fixture.pastedRange, originalPastedText: Fixture.original
+        )
+        XCTAssertEqual(probe.result, .revised(original: Fixture.original, corrected: Fixture.corrected))
+        XCTAssertEqual(probe.commonPrefixUTF16, (fixture.history as NSString).length)
+        XCTAssertEqual(probe.echoLineLocation, (fixture.history as NSString).length)
+        XCTAssertEqual(probe.echoLineUTF16, ("> \(Fixture.corrected)" as NSString).length)
+    }
+
     func testRealCaseFromDeviceRun4() {
         let original = "Protopediaビデオメーカーを作りました。"
         let rule = String(repeating: "─", count: 80)

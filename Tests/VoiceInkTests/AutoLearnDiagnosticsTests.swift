@@ -99,6 +99,10 @@ final class AutoLearnDiagnosticsTests: XCTestCase {
         fields.correctedUTF16 = 27
         fields.finalStage = "input-empty 口述"
         fields.finalCorrectedUTF16 = nil
+        fields.baselineUTF16 = 3035
+        fields.commonPrefixUTF16 = 12
+        fields.echoLineOffset = -2434
+        fields.echoLineUTF16 = 40
         let line = AutoLearnDiagnostics.finalizeLine(
             bundleIdentifier: "com.mitchellh.ghostty", reason: .focus, finalFieldText: history,
             revisionFound: true, stage: .revised, terminal: fields
@@ -110,6 +114,10 @@ final class AutoLearnDiagnosticsTests: XCTestCase {
         XCTAssertTrue(line.contains("correctedUTF16=27"))
         XCTAssertTrue(line.contains("finalStage=unknown"))
         XCTAssertTrue(line.contains("finalCorrectedUTF16=none"))
+        XCTAssertTrue(line.contains("baselineUTF16=3035"))
+        XCTAssertTrue(line.contains("commonPrefixUTF16=12"))
+        XCTAssertTrue(line.contains("echoLineOffset=-2434"))
+        XCTAssertTrue(line.contains("echoLineUTF16=40"))
     }
 
     func testReasonRawValues() {

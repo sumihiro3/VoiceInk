@@ -75,6 +75,12 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
         var source: Source = .none
         /// 入力欄が空のときに、送った文の行を調べた結果(ログ用)。
         var sentEcho: AutoLearnTerminalSentEcho.Result?
+        /// 送った文の行を調べたときの位置と長さ(ログ用)。
+        var sentEchoProbe: AutoLearnTerminalSentEcho.Probe?
+        /// 貼り付けたときの画面の長さ(UTF-16、ログ用)。
+        var baselineUTF16 = 0
+        /// 貼り付けた位置(UTF-16、ログ用)。
+        var pastedLocation = 0
     }
 
     private let baselineFieldText: String
@@ -168,26 +174,27 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
     ///    あって後ろの目印が無く、応答まで切り出して `too-long` になるときもここに来る(実機の5回目)。
     /// 3. どちらでも決まらなければ、1秒ごとの読み取りで最後に取れた直しを使う。
     ///    1秒ごとの読み取りは Enter の直前の直しに間に合わないことがあるため、最後の手段にする。
-    ///    ただし、送った文の行が見つからず、画面の文字が貼り付けたときより増えていなければ、
+    ///    ただし、送った文の行が見つからず、画面の文字の減り方が貼り付けた長さ(と余裕)以内なら、
     ///    送らずに入力欄を消したとみなして使わない。消している途中の状態を候補にしないため(実機の8回目)。
+    ///    それより大きく減ったときは画面の描き直し(実機の10回目)とみなし、持っておいた直しを使う。
     func resolve(finalFieldText: String?) -> Resolution {
         stop()
         var revision: AutoLearnRevision?
         var source = Source.none
         let finalProbe = finalFieldText.map { locate(finalFieldText: $0) }
-        var sentEcho: AutoLearnTerminalSentEcho.Result?
+        var sentEchoProbe: AutoLearnTerminalSentEcho.Probe?
         if let finalRevision = finalProbe?.revision {
             revision = finalRevision
             source = .final
         } else if let finalFieldText, finalProbe?.stage != .notRevised {
-            let echo = AutoLearnTerminalSentEcho.locate(
+            let probe = AutoLearnTerminalSentEcho.probe(
                 baselineFieldText: baselineFieldText,
                 finalFieldText: finalFieldText,
                 pastedRange: pastedRange,
                 originalPastedText: originalPastedText
             )
-            sentEcho = echo
-            switch echo {
+            sentEchoProbe = probe
+            switch probe.result {
             case .revised(let original, let corrected):
                 revision = AutoLearnRevision(original: original, corrected: corrected)
                 source = .sentEcho
@@ -197,9 +204,14 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
                 break
             }
         }
+        let sentEcho = sentEchoProbe?.result
+        let baselineLength = (baselineFieldText as NSString).length
+        let shrink = baselineLength - (finalFieldText.map { ($0 as NSString).length } ?? baselineLength)
+        // 消したときは、画面が貼り付けた長さほど短くなるだけ(実機の8回目: 28)。それより大きく
+        // 縮んだときは、Claude Code が画面を描き直したとみなす(実機の10回目: 2086)。
         let clearedWithoutSending = sentEcho == .notFound
-            && (finalFieldText.map { ($0 as NSString).length } ?? 0)
-                <= (baselineFieldText as NSString).length
+            && shrink >= 0
+            && shrink <= pastedRange.length + AutoLearnTerminalRevisionLocator.correctedLengthSlackUTF16
         if source == .none, !clearedWithoutSending, let lastRevision {
             revision = lastRevision
             source = .tracked
@@ -222,7 +234,10 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
             lastRevisionAgeMilliseconds: ageMilliseconds,
             finalProbe: finalProbe,
             source: source,
-            sentEcho: sentEcho
+            sentEcho: sentEcho,
+            sentEchoProbe: sentEchoProbe,
+            baselineUTF16: baselineLength,
+            pastedLocation: pastedRange.location
         )
     }
 

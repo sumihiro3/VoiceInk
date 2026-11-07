@@ -162,6 +162,36 @@ final class AutoLearnTerminalSnapshotTrackerTests: XCTestCase {
         XCTAssertEqual(resolution.revision?.corrected, corrected)
     }
 
+    /// 実機の10回目: Enter のあと Claude Code が画面を描き直し、画面の文字が大きく減った(3035 → 949)。
+    /// 送った文の行は見つからないが、消したのではないので、持っておいた直しを使う。
+    func testRedrawnScreenStillUsesTrackedRevision() {
+        let filler = String(repeating: "古い出力の行です。\n", count: 200)
+        let before = AutoLearnTerminalFixture(leadingFiller: filler)
+        let redrawn = AutoLearnTerminalFixture()
+        let reader = FakeReader([before.revisedFinal])
+        let scheduler = FakeScheduler()
+        let tracker = AutoLearnTerminalSnapshotTracker(
+            baselineFieldText: before.baseline,
+            pastedRange: before.pastedRange,
+            originalPastedText: AutoLearnTerminalFixture.original,
+            readFieldText: { reader.read() },
+            scheduler: scheduler,
+            interval: 1_000_000_000,
+            now: { 0 }
+        )
+        tracker.start()
+        scheduler.fire()
+        XCTAssertNotNil(tracker.lastRevision)
+
+        let resolution = tracker.resolve(finalFieldText: redrawn.clearedFinal)
+        XCTAssertEqual(resolution.sentEcho, .notFound)
+        XCTAssertEqual(resolution.sentEchoProbe?.commonPrefixUTF16, 0)
+        XCTAssertEqual(resolution.source, .tracked)
+        XCTAssertEqual(resolution.revision?.corrected, AutoLearnTerminalFixture.corrected)
+        XCTAssertEqual(resolution.baselineUTF16, (before.baseline as NSString).length)
+        XCTAssertEqual(resolution.pastedLocation, before.pastedRange.location)
+    }
+
     func testCountsRevisionUpdatesAndAgeAndProbesFinal() {
         let midEdit = fixture.revisedFinal.replacingOccurrences(of: "Claude Code", with: "Claude")
         let reader = FakeReader([fixture.revisedFinal, fixture.revisedFinal, midEdit])

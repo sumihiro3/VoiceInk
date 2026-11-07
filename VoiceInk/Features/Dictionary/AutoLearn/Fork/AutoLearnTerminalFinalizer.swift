@@ -97,7 +97,13 @@ enum AutoLearnTerminalFinalizer {
                     finalStage: resolution.finalProbe.map { finalizeStage(for: $0.stage).rawValue },
                     finalCorrectedUTF16: resolution.finalProbe?.revision.map { ($0.corrected as NSString).length },
                     source: resolution.source.rawValue,
-                    sentEcho: resolution.sentEcho.map(sentEchoLabel)
+                    sentEcho: resolution.sentEcho.map(sentEchoLabel),
+                    baselineUTF16: resolution.baselineUTF16,
+                    commonPrefixUTF16: resolution.sentEchoProbe?.commonPrefixUTF16,
+                    echoLineOffset: resolution.sentEchoProbe?.echoLineLocation.map {
+                        $0 - resolution.pastedLocation
+                    },
+                    echoLineUTF16: resolution.sentEchoProbe?.echoLineUTF16
                 )
             )
         }

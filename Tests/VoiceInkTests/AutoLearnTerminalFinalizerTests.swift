@@ -64,6 +64,7 @@ final class AutoLearnTerminalFinalizerTests: XCTestCase {
         expected.originalUTF16 = (revision.original as NSString).length
         expected.correctedUTF16 = (revision.corrected as NSString).length
         expected.source = "tracked"
+        expected.baselineUTF16 = 0
         XCTAssertEqual(decision.terminal, expected)
     }
 

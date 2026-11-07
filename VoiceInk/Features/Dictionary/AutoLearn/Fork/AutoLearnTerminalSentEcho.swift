@@ -24,6 +24,17 @@ enum AutoLearnTerminalSentEcho {
         max(2, originalLength / 4)
     }
 
+    /// 送った文の行を調べた結果と、ログ用の位置・長さ(UTF-16)。口述の中身は持たない。
+    struct Probe: Equatable, Sendable {
+        let result: Result
+        /// 貼り付けたときの画面と送ったあとの画面で、先頭から一致した長さ。
+        let commonPrefixUTF16: Int
+        /// 送った文とみなした行の先頭の位置。行を選ぶ前に止まったときは nil。
+        let echoLineLocation: Int?
+        /// 送った文とみなした行の長さ(プロンプトの記号を外す前)。
+        let echoLineUTF16: Int?
+    }
+
     /// 貼り付けたときの画面と送ったあとの画面を先頭から比べ、最初に違う行を送った文の行とみなす。
     static func locate(
         baselineFieldText: String,
@@ -31,13 +42,26 @@ enum AutoLearnTerminalSentEcho {
         pastedRange: NSRange,
         originalPastedText: String
     ) -> Result {
+        probe(
+            baselineFieldText: baselineFieldText, finalFieldText: finalFieldText,
+            pastedRange: pastedRange, originalPastedText: originalPastedText
+        ).result
+    }
+
+    /// `locate` と同じ判定をし、ログ用の位置と長さも返す。
+    static func probe(
+        baselineFieldText: String,
+        finalFieldText: String,
+        pastedRange: NSRange,
+        originalPastedText: String
+    ) -> Probe {
         let baseline = Array(baselineFieldText.utf16)
         let final = Array(finalFieldText.utf16)
         let limit = min(baseline.count, final.count, NSMaxRange(pastedRange))
         var common = 0
         while common < limit, baseline[common] == final[common] { common += 1 }
         guard common + AutoLearnTerminalRevisionLocator.searchRadiusUTF16 >= pastedRange.location else {
-            return .notFound
+            return Probe(result: .notFound, commonPrefixUTF16: common, echoLineLocation: nil, echoLineUTF16: nil)
         }
 
         let finalText = finalFieldText as NSString
@@ -53,22 +77,30 @@ enum AutoLearnTerminalSentEcho {
             echo = strippedPrompt(finalText.substring(with: lineRange))
         }
 
+        let lineLength = (finalText.substring(with: lineRange).trimmingCharacters(in: .newlines) as NSString).length
+        func finish(_ result: Result) -> Probe {
+            Probe(
+                result: result, commonPrefixUTF16: common,
+                echoLineLocation: lineRange.location, echoLineUTF16: lineLength
+            )
+        }
+
         let original = AutoLearnTextNormalizer.accessibilityComparable(originalPastedText)
         let corrected = AutoLearnTextNormalizer.accessibilityComparable(echo)
-        guard !original.isEmpty, !corrected.isEmpty else { return .notFound }
+        guard !original.isEmpty, !corrected.isEmpty else { return finish(.notFound) }
 
         let originalLength = (original as NSString).length
         let correctedLength = (corrected as NSString).length
         guard correctedLength <= originalLength * AutoLearnTerminalRevisionLocator.correctedLengthMultiplier
             + AutoLearnTerminalRevisionLocator.correctedLengthSlackUTF16
-        else { return .notFound }
+        else { return finish(.notFound) }
 
         guard sharedEdgeCharacters(original, corrected)
             >= minimumSharedCharacters(originalLength: original.count)
-        else { return .notFound }
+        else { return finish(.notFound) }
 
-        if original == corrected { return .unchanged }
-        return .revised(original: original, corrected: corrected)
+        if original == corrected { return finish(.unchanged) }
+        return finish(.revised(original: original, corrected: corrected))
     }
 
     private static func strippedPrompt(_ line: String) -> String {
