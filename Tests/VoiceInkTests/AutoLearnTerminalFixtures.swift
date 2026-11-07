@@ -79,6 +79,13 @@ struct AutoLearnTerminalFixture {
     /// The input was cleared (for example with Esc) without sending: no echo, only an empty frame.
     var clearedFinal: String { emptyInputFinal }
 
+    /// Sent with Enter, but the history shows a placeholder instead of the sent text, so no echo is found.
+    var sentPlaceholderFinal: String {
+        let block = inputBlock("")
+        return history + "> [Pasted text #1]\n\n⏺ 了解しました。確認します。\n\n"
+            + block.prefix + block.suffix
+    }
+
     /// A mid-edit state: the first word is half typed.
     static let midEdit = "Claudeとコーデックスどちらがいいですか。"
     var midEditFinal: String { screen(Self.midEdit).0 }

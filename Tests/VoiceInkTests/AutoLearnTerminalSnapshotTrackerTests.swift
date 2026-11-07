@@ -67,16 +67,37 @@ final class AutoLearnTerminalSnapshotTrackerTests: XCTestCase {
         XCTAssertEqual(resolution.revision?.corrected, AutoLearnTerminalFixture.corrected)
         XCTAssertEqual(resolution.readCount, 3)
 
-        let cleared = makeTracker(
+        let placeholder = makeTracker(
             reader: FakeReader([fixture.revisedFinal]), scheduler: scheduler
         )
-        cleared.start()
+        placeholder.start()
         scheduler.fire()
-        let fallback = cleared.resolve(finalFieldText: fixture.clearedFinal)
+        let fallback = placeholder.resolve(finalFieldText: fixture.sentPlaceholderFinal)
+        XCTAssertEqual(fallback.sentEcho, .notFound)
         XCTAssertEqual(fallback.source, .tracked)
         XCTAssertTrue(fallback.usedTrackedRevision)
         XCTAssertNil(fallback.finalOutcome)
         XCTAssertEqual(fallback.revision?.corrected, AutoLearnTerminalFixture.corrected)
+    }
+
+    /// 実機の8回目: 入力欄の文を消して送らなかった。消している途中の状態を候補にしない。
+    func testClearedWithoutSendingIgnoresTrackedRevision() {
+        let deleting = fixture.revisedFinal.replacingOccurrences(
+            of: AutoLearnTerminalFixture.corrected, with: "Claude"
+        )
+        let reader = FakeReader([deleting])
+        let scheduler = FakeScheduler()
+        let tracker = makeTracker(reader: reader, scheduler: scheduler)
+        tracker.start()
+        scheduler.fire()
+        XCTAssertNotNil(tracker.lastRevision)
+
+        let resolution = tracker.resolve(finalFieldText: fixture.clearedFinal)
+        XCTAssertEqual(resolution.finalProbe?.stage, .inputEmpty)
+        XCTAssertEqual(resolution.sentEcho, .notFound)
+        XCTAssertEqual(resolution.source, .none)
+        XCTAssertFalse(resolution.usedTrackedRevision)
+        XCTAssertNil(resolution.revision)
     }
 
     func testFinalInputWinsOverTrackedMidEdit() {

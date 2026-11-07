@@ -168,6 +168,8 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
     ///    あって後ろの目印が無く、応答まで切り出して `too-long` になるときもここに来る(実機の5回目)。
     /// 3. どちらでも決まらなければ、1秒ごとの読み取りで最後に取れた直しを使う。
     ///    1秒ごとの読み取りは Enter の直前の直しに間に合わないことがあるため、最後の手段にする。
+    ///    ただし、送った文の行が見つからず、画面の文字が貼り付けたときより増えていなければ、
+    ///    送らずに入力欄を消したとみなして使わない。消している途中の状態を候補にしないため(実機の8回目)。
     func resolve(finalFieldText: String?) -> Resolution {
         stop()
         var revision: AutoLearnRevision?
@@ -195,7 +197,10 @@ final class AutoLearnTerminalSnapshotTracker: @unchecked Sendable {
                 break
             }
         }
-        if source == .none, let lastRevision {
+        let clearedWithoutSending = sentEcho == .notFound
+            && (finalFieldText.map { ($0 as NSString).length } ?? 0)
+                <= (baselineFieldText as NSString).length
+        if source == .none, !clearedWithoutSending, let lastRevision {
             revision = lastRevision
             source = .tracked
         }
